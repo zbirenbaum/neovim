@@ -40,6 +40,8 @@ local keymap = {}
 --
 ---@param opts table A table of |:map-arguments| such as "silent". In addition to the options
 ---                  listed in |nvim_set_keymap()|, this table also accepts the following keys:
+---                  - buffer: (number or boolean) Add a mapping to the given buffer. When "true"
+---                    or 0, use the current buffer.
 ---                  - replace_keycodes: (boolean, default true) When both this and expr is "true",
 ---                  |nvim_replace_termcodes()| is applied to the result of Lua expr maps.
 ---                  - remap: (boolean) Make the mapping recursive. This is the
@@ -47,20 +49,20 @@ local keymap = {}
 ---                  Default `false`.
 ---@see |nvim_set_keymap()|
 function keymap.set(mode, lhs, rhs, opts)
-  vim.validate {
-    mode = {mode, {'s', 't'}},
-    lhs = {lhs, 's'},
-    rhs = {rhs, {'s', 'f'}},
-    opts = {opts, 't', true}
-  }
+  vim.validate({
+    mode = { mode, { 's', 't' } },
+    lhs = { lhs, 's' },
+    rhs = { rhs, { 's', 'f' } },
+    opts = { opts, 't', true },
+  })
 
   opts = vim.deepcopy(opts) or {}
-  local is_rhs_luaref = type(rhs) == "function"
-  mode = type(mode) == 'string' and {mode} or mode
+  local is_rhs_luaref = type(rhs) == 'function'
+  mode = type(mode) == 'string' and { mode } or mode
 
   if is_rhs_luaref and opts.expr then
     local user_rhs = rhs
-    rhs = function ()
+    rhs = function()
       local res = user_rhs()
       if res == nil then
         -- TODO(lewis6991): Handle this in C?
@@ -116,19 +118,18 @@ end
 ---@see |vim.keymap.set()|
 ---
 function keymap.del(modes, lhs, opts)
-  vim.validate {
-    mode = {modes, {'s', 't'}},
-    lhs = {lhs, 's'},
-    opts = {opts, 't', true}
-  }
+  vim.validate({
+    mode = { modes, { 's', 't' } },
+    lhs = { lhs, 's' },
+    opts = { opts, 't', true },
+  })
 
   opts = opts or {}
-  modes = type(modes) == 'string' and {modes} or modes
+  modes = type(modes) == 'string' and { modes } or modes
 
   local buffer = false
   if opts.buffer ~= nil then
     buffer = opts.buffer == true and 0 or opts.buffer
-    opts.buffer = nil
   end
 
   if buffer == false then

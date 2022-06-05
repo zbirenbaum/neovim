@@ -30,7 +30,7 @@ static void add_user(garray_T *users, char *user, bool need_copy)
 
   if (user_copy == NULL || *user_copy == NUL) {
     if (need_copy) {
-      xfree(user);
+      xfree(user_copy);
     }
     return;
   }
@@ -160,7 +160,6 @@ char *os_get_user_directory(const char *name)
   return NULL;
 }
 
-
 #if defined(EXITFREE)
 
 void free_users(void)
@@ -187,11 +186,11 @@ static void init_users(void)
 }
 
 /// Given to ExpandGeneric() to obtain an user names.
-char_u *get_users(expand_T *xp, int idx)
+char *get_users(expand_T *xp, int idx)
 {
   init_users();
   if (idx < ga_users.ga_len) {
-    return ((char_u **)ga_users.ga_data)[idx];
+    return ((char **)ga_users.ga_data)[idx];
   }
   return NULL;
 }

@@ -37,6 +37,7 @@
 # include <locale.h>
 #endif
 #include "nvim/garray.h"
+#include "nvim/grid.h"
 #include "nvim/log.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -120,7 +121,6 @@ void event_init(void)
   resize_events = multiqueue_new_child(main_loop.events);
 
   // early msgpack-rpc initialization
-  msgpack_rpc_init_method_table();
   msgpack_rpc_helpers_init();
   input_init();
   signal_init();
@@ -262,6 +262,8 @@ int main(int argc, char **argv)
   command_line_scan(&params);
 
   nlua_init();
+
+  TIME_MSG("init lua interpreter");
 
   if (embedded_mode) {
     const char *err;
@@ -454,7 +456,7 @@ int main(int argc, char **argv)
   // writing end of the pipe doesn't like, e.g., in case stdin and stderr
   // are the same terminal: "cat | vim -".
   // Using autocommands here may cause trouble...
-  if (params.edit_type == EDIT_STDIN && !recoverymode) {
+  if ((params.edit_type == EDIT_STDIN || stdin_fd >= 0) && !recoverymode) {
     read_stdin();
   }
 
@@ -513,7 +515,7 @@ int main(int argc, char **argv)
 
   // Need to jump to the tag before executing the '-c command'.
   // Makes "vim -c '/return' -t main" work.
-  handle_tag(params.tagname);
+  handle_tag((char_u *)params.tagname);
 
   // Execute any "+", "-c" and "-S" arguments.
   if (params.n_commands > 0) {
@@ -528,11 +530,6 @@ int main(int argc, char **argv)
 
   // 'autochdir' has been postponed.
   do_autochdir();
-
-  // start in insert mode
-  if (p_im) {
-    need_start_insertmode = true;
-  }
 
   set_vim_var_nr(VV_VIM_DID_ENTER, 1L);
   apply_autocmds(EVENT_VIMENTER, NULL, NULL, false, curbuf);
@@ -642,8 +639,7 @@ void getout(int exitval)
           bufref_T bufref;
 
           set_bufref(&bufref, buf);
-          apply_autocmds(EVENT_BUFWINLEAVE, buf->b_fname,
-                         buf->b_fname, false, buf);
+          apply_autocmds(EVENT_BUFWINLEAVE, buf->b_fname, buf->b_fname, false, buf);
           if (bufref_valid(&bufref)) {
             buf_set_changedtick(buf, -1);  // note that we did it already
           }
@@ -806,7 +802,7 @@ static void init_locale(void)
   snprintf(localepath, sizeof(localepath), "%s", get_vim_var_str(VV_PROGPATH));
   char *tail = (char *)path_tail_with_sep((char_u *)localepath);
   *tail = NUL;
-  tail = (char *)path_tail((char_u *)localepath);
+  tail = path_tail(localepath);
   xstrlcpy(tail, "share/locale",
            sizeof(localepath) - (size_t)(tail - localepath));
   bindtextdomain(PROJECT_NAME, localepath);
@@ -814,7 +810,6 @@ static void init_locale(void)
   TIME_MSG("locale set");
 }
 #endif
-
 
 static uint64_t server_connect(char *server_addr, const char **errmsg)
 {
@@ -835,8 +830,8 @@ static uint64_t server_connect(char *server_addr, const char **errmsg)
 }
 
 /// Handle remote subcommands
-static void remote_request(mparm_T *params, int remote_args,
-                           char *server_addr, int argc, char **argv)
+static void remote_request(mparm_T *params, int remote_args, char *server_addr, int argc,
+                           char **argv)
 {
   const char *connect_error = NULL;
   uint64_t chan = server_connect(server_addr, &connect_error);
@@ -884,7 +879,7 @@ static void remote_request(mparm_T *params, int remote_args,
   TriState should_exit = kNone;
   TriState tabbed = kNone;
 
-  for (size_t i = 0; i < rvobj.data.dictionary.size ; i++) {
+  for (size_t i = 0; i < rvobj.data.dictionary.size; i++) {
     if (strcmp(rvobj.data.dictionary.items[i].key.data, "errmsg") == 0) {
       if (rvobj.data.dictionary.items[i].value.type != kObjectTypeString) {
         mch_errmsg("vim._cs_remote returned an unexpected type for 'errmsg'\n");
@@ -921,7 +916,6 @@ static void remote_request(mparm_T *params, int remote_args,
     params->window_layout = WIN_TABS;
   }
 }
-
 
 /// Decides whether text (as opposed to commands) will be read from stdin.
 /// @see EDIT_STDIN
@@ -1131,7 +1125,7 @@ static void command_line_scan(mparm_T *parmp)
         }
         parmp->edit_type = EDIT_QF;
         if (argv[0][argv_idx]) {  // "-q{errorfile}"
-          parmp->use_ef = (char_u *)argv[0] + argv_idx;
+          parmp->use_ef = argv[0] + argv_idx;
           argv_idx = -1;
         } else if (argc > 1) {    // "-q {errorfile}"
           want_argument = true;
@@ -1160,7 +1154,7 @@ static void command_line_scan(mparm_T *parmp)
         }
         parmp->edit_type = EDIT_TAG;
         if (argv[0][argv_idx]) {  // "-t{tag}"
-          parmp->tagname = (char_u *)argv[0] + argv_idx;
+          parmp->tagname = argv[0] + argv_idx;
           argv_idx = -1;
         } else {  // "-t {tag}"
           want_argument = true;
@@ -1272,7 +1266,7 @@ static void command_line_scan(mparm_T *parmp)
           break;
 
         case 'q':    // "-q {errorfile}" QuickFix mode
-          parmp->use_ef = (char_u *)argv[0];
+          parmp->use_ef = argv[0];
           break;
 
         case 'i':    // "-i {shada}" use for shada
@@ -1313,7 +1307,7 @@ scripterror:
         }
 
         case 't':    // "-t {tag}"
-          parmp->tagname = (char_u *)argv[0];
+          parmp->tagname = argv[0];
           break;
         case 'u':    // "-u {vimrc}" vim inits file
           parmp->use_vimrc = argv[0];
@@ -1363,7 +1357,7 @@ scripterror:
       if (parmp->diff_mode && os_isdir(p) && GARGCOUNT > 0
           && !os_isdir(alist_name(&GARGLIST[0]))) {
         char_u *r = (char_u *)concat_fnames((char *)p,
-                                            (char *)path_tail(alist_name(&GARGLIST[0])), true);
+                                            path_tail((char *)alist_name(&GARGLIST[0])), true);
         xfree(p);
         p = r;
       }
@@ -1376,7 +1370,7 @@ scripterror:
       int alist_fnum_flag = edit_stdin(had_stdin_file, parmp)
                             ? 1   // add buffer nr after exp.
                             : 2;  // add buffer number now and use curbuf
-      alist_add(&global_alist, p, alist_fnum_flag);
+      alist_add(&global_alist, (char *)p, alist_fnum_flag);
     }
 
     // If there are no more letters after the current "-", go to next argument.
@@ -1469,7 +1463,7 @@ static void init_path(const char *exename)
     path_guess_exepath(exename, exepath, sizeof(exepath));
   }
   set_vim_var_string(VV_PROGPATH, exepath, -1);
-  set_vim_var_string(VV_PROGNAME, (char *)path_tail((char_u *)exename), -1);
+  set_vim_var_string(VV_PROGNAME, path_tail(exename), -1);
 
 #ifdef WIN32
   // Append the process start directory to $PATH, so that ":!foo" finds tools
@@ -1498,7 +1492,6 @@ static void set_window_layout(mparm_T *paramp)
   }
 }
 
-
 /*
  * "-q errorfile": Load the error file now.
  * If the error file can't be read, exit before doing anything else.
@@ -1507,10 +1500,10 @@ static void handle_quickfix(mparm_T *paramp)
 {
   if (paramp->edit_type == EDIT_QF) {
     if (paramp->use_ef != NULL) {
-      set_string_option_direct("ef", -1, paramp->use_ef, OPT_FREE, SID_CARG);
+      set_string_option_direct("ef", -1, (char_u *)paramp->use_ef, OPT_FREE, SID_CARG);
     }
     vim_snprintf((char *)IObuff, IOSIZE, "cfile %s", p_ef);
-    if (qf_init(NULL, p_ef, p_efm, true, IObuff, p_menc) < 0) {
+    if (qf_init(NULL, (char *)p_ef, p_efm, true, (char *)IObuff, (char *)p_menc) < 0) {
       msg_putchar('\n');
       os_exit(3);
     }
@@ -1748,8 +1741,8 @@ static void edit_buffers(mparm_T *parmp, char_u *cwd)
       // at the ATTENTION prompt close the window.
       swap_exists_did_quit = false;
       (void)do_ecmd(0, arg_idx < GARGCOUNT
-          ? alist_name(&GARGLIST[arg_idx]) : NULL,
-                    NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
+                    ? (char *)alist_name(&GARGLIST[arg_idx])
+                    : NULL, NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
       if (swap_exists_did_quit) {
         // abort or quit selected
         if (got_int || only_one_window()) {
@@ -1812,7 +1805,7 @@ static void exe_pre_commands(mparm_T *parmp)
 
   if (cnt > 0) {
     curwin->w_cursor.lnum = 0;     // just in case..
-    sourcing_name = (char_u *)_("pre-vimrc command line");
+    sourcing_name = _("pre-vimrc command line");
     current_sctx.sc_sid = SID_CMDARG;
     for (i = 0; i < cnt; i++) {
       do_cmdline_cmd(cmds[i]);
@@ -1839,7 +1832,7 @@ static void exe_commands(mparm_T *parmp)
   if (parmp->tagname == NULL && curwin->w_cursor.lnum <= 1) {
     curwin->w_cursor.lnum = 0;
   }
-  sourcing_name = (char_u *)"command line";
+  sourcing_name = "command line";
   current_sctx.sc_sid = SID_CARG;
   current_sctx.sc_seq = 0;
   for (i = 0; i < parmp->n_commands; i++) {
@@ -2060,16 +2053,16 @@ static int execute_env(char *env)
 {
   const char *initstr = os_getenv(env);
   if (initstr != NULL) {
-    char_u *save_sourcing_name = sourcing_name;
+    char_u *save_sourcing_name = (char_u *)sourcing_name;
     linenr_T save_sourcing_lnum = sourcing_lnum;
-    sourcing_name = (char_u *)env;
+    sourcing_name = env;
     sourcing_lnum = 0;
     const sctx_T save_current_sctx = current_sctx;
     current_sctx.sc_sid = SID_ENV;
     current_sctx.sc_seq = 0;
     current_sctx.sc_lnum = 0;
     do_cmdline_cmd((char *)initstr);
-    sourcing_name = save_sourcing_name;
+    sourcing_name = (char *)save_sourcing_name;
     sourcing_lnum = save_sourcing_lnum;
     current_sctx = save_current_sctx;
     return OK;
@@ -2103,7 +2096,7 @@ static bool file_owned(const char *fname)
 static void mainerr(const char *errstr, const char *str)
   FUNC_ATTR_NORETURN
 {
-  char *prgname = (char *)path_tail((char_u *)argv0);
+  char *prgname = path_tail(argv0);
 
   signal_stop();              // kill us with CTRL-C here, if you like
 
@@ -2179,7 +2172,6 @@ static void usage(void)
   mch_msg(_("  --startuptime <file>  Write startup timing messages to <file>\n"));
   mch_msg(_("\nSee \":help startup-options\" for all options.\n"));
 }
-
 
 /*
  * Check the result of the ATTENTION dialog:

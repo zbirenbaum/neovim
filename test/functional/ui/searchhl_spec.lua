@@ -43,7 +43,7 @@ describe('search highlighting', function()
     insert("some text\nmore text")
     feed_command('1,2fold')
     feed("gg/text")
-    screen:expect([[
+    screen:expect{grid=[[
       {6:+--  2 lines: some text·················}|
       {1:~                                       }|
       {1:~                                       }|
@@ -51,7 +51,9 @@ describe('search highlighting', function()
       {1:~                                       }|
       {1:~                                       }|
       /text^                                   |
-    ]])
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 3, curline = 0, curcol = 9, linecount = 2};
+    }}
   end)
 
   it('works', function()
@@ -107,6 +109,146 @@ describe('search highlighting', function()
       {1:~                                       }|
       :nohlsearch                             |
     ]])
+  end)
+
+  describe('CurSearch highlight', function()
+    before_each(function()
+      screen:set_default_attr_ids({
+        [1] = {background = Screen.colors.Yellow},  -- Search
+        [2] = {foreground = Screen.colors.White, background = Screen.colors.Black},  -- CurSearch
+        [3] = {foreground = Screen.colors.Red},  -- WarningMsg
+      })
+      command('highlight CurSearch guibg=Black guifg=White')
+    end)
+
+    it('works for match under cursor', function()
+      insert([[
+        There is no way that a bee should be
+        able to fly. Its wings are too small
+        to get its fat little body off the
+        ground. The bee, of course, flies
+        anyway because bees don't care what
+        humans think is impossible.]])
+
+      feed('/bee<CR>')
+      screen:expect{grid=[[
+        There is no way that a {2:^bee} should be    |
+        able to fly. Its wings are too small    |
+        to get its fat little body off the      |
+        ground. The {1:bee}, of course, flies       |
+        anyway because {1:bee}s don't care what     |
+        humans think is impossible.             |
+        {3:search hit BOTTOM, continuing at TOP}    |
+      ]]}
+
+      feed('nn')
+      screen:expect{grid=[[
+        There is no way that a {1:bee} should be    |
+        able to fly. Its wings are too small    |
+        to get its fat little body off the      |
+        ground. The {1:bee}, of course, flies       |
+        anyway because {2:^bee}s don't care what     |
+        humans think is impossible.             |
+        /bee                                    |
+      ]]}
+
+      feed('N')
+      screen:expect{grid=[[
+        There is no way that a {1:bee} should be    |
+        able to fly. Its wings are too small    |
+        to get its fat little body off the      |
+        ground. The {2:^bee}, of course, flies       |
+        anyway because {1:bee}s don't care what     |
+        humans think is impossible.             |
+        ?bee                                    |
+      ]]}
+    end)
+
+    it('works for multiline match', function()
+      command([[call setline(1, ['one', 'foo', 'bar', 'baz', 'foo the foo and foo', 'bar'])]])
+      feed('gg/foo<CR>')
+      screen:expect([[
+        one                                     |
+        {2:^foo}                                     |
+        bar                                     |
+        baz                                     |
+        {1:foo} the {1:foo} and {1:foo}                     |
+        bar                                     |
+        /foo                                    |
+      ]])
+      feed('n')
+      screen:expect([[
+        one                                     |
+        {1:foo}                                     |
+        bar                                     |
+        baz                                     |
+        {2:^foo} the {1:foo} and {1:foo}                     |
+        bar                                     |
+        /foo                                    |
+      ]])
+      feed('n')
+      screen:expect([[
+        one                                     |
+        {1:foo}                                     |
+        bar                                     |
+        baz                                     |
+        {1:foo} the {2:^foo} and {1:foo}                     |
+        bar                                     |
+        /foo                                    |
+      ]])
+      feed('n')
+      screen:expect([[
+        one                                     |
+        {1:foo}                                     |
+        bar                                     |
+        baz                                     |
+        {1:foo} the {1:foo} and {2:^foo}                     |
+        bar                                     |
+        /foo                                    |
+      ]])
+      command([[call setline(5, 'foo')]])
+      feed('0?<CR>')
+      screen:expect([[
+        one                                     |
+        {2:^foo}                                     |
+        bar                                     |
+        baz                                     |
+        {1:foo}                                     |
+        bar                                     |
+        ?foo                                    |
+      ]])
+      feed('gg/foo\\nbar<CR>')
+      screen:expect([[
+        one                                     |
+        {2:^foo}                                     |
+        {2:bar}                                     |
+        baz                                     |
+        {1:foo}                                     |
+        {1:bar}                                     |
+        /foo\nbar                               |
+      ]])
+      command([[call setline(1, ['---', 'abcdefg', 'hijkl', '---', 'abcdefg', 'hijkl'])]])
+      feed('gg/efg\\nhij<CR>')
+      screen:expect([[
+        ---                                     |
+        abcd{2:^efg}                                 |
+        {2:hij}kl                                   |
+        ---                                     |
+        abcd{1:efg}                                 |
+        {1:hij}kl                                   |
+        /efg\nhij                               |
+      ]])
+      feed('n')
+      screen:expect([[
+        ---                                     |
+        abcd{1:efg}                                 |
+        {1:hij}kl                                   |
+        ---                                     |
+        abcd{2:^efg}                                 |
+        {2:hij}kl                                   |
+        /efg\nhij                               |
+      ]])
+    end)
   end)
 
   it('highlights after EOL', function()
@@ -439,19 +581,20 @@ describe('search highlighting', function()
   end)
 
   it('works with matchadd and syntax', function()
-    screen:set_default_attr_ids( {
-        [1] = {bold=true, foreground=Screen.colors.Blue},
-        [2] = {background = colors.Yellow},
-        [3] = {reverse = true},
-        [4] = {foreground = colors.Red},
-        [5] = {bold = true, background = colors.Green},
-        [6] = {italic = true, background = colors.Magenta},
-        [7] = {bold = true, background = colors.Yellow},
-    } )
+    screen:set_default_attr_ids {
+      [1] = {bold=true, foreground=Screen.colors.Blue};
+      [2] = {background = colors.Yellow};
+      [3] = {reverse = true};
+      [4] = {foreground = colors.Red};
+      [5] = {bold = true, background = colors.Green};
+      [6] = {italic = true, background = colors.Magenta};
+      [7] = {bold = true, background = colors.Yellow};
+      [8] = {foreground = Screen.colors.Blue4, background = Screen.colors.LightGray};
+    }
     feed_command('set hlsearch')
-    insert([[
+    insert [[
       very special text
-    ]])
+    ]]
     feed_command("syntax on")
     feed_command("highlight MyGroup guibg=Green gui=bold")
     feed_command("highlight MyGroup2 guibg=Magenta gui=italic")
@@ -461,7 +604,7 @@ describe('search highlighting', function()
     -- searchhl and matchadd matches are exclusive, only the highest priority
     -- is used (and matches with lower priorities are not combined)
     feed_command("/ial te")
-    screen:expect([[
+    screen:expect{grid=[[
         very {5:spec^ial}{2: te}{6:xt}                     |
                                               |
       {1:~                                       }|
@@ -469,10 +612,21 @@ describe('search highlighting', function()
       {1:~                                       }|
       {1:~                                       }|
       {4:search hit BOTTOM, continuing at TOP}    |
-    ]])
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 3, curline = 0, curcol = 11, linecount = 2};
+    }}
 
     -- check highlights work also in folds
     feed("zf4j")
+    screen:expect{grid=[[
+      {8:^+--  2 lines: very special text·········}|
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+      {4:search hit BOTTOM, continuing at TOP}    |
+    ]]}
     command("%foldopen")
     screen:expect([[
         very {5:spec^ial}{2: te}{6:xt}                     |

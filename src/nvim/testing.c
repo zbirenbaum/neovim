@@ -3,9 +3,9 @@
 
 // testing.c: Support for tests
 
+#include "nvim/eval.h"
 #include "nvim/eval/encode.h"
 #include "nvim/ex_docmd.h"
-#include "nvim/eval.h"
 #include "nvim/os/os.h"
 #include "nvim/testing.h"
 
@@ -90,7 +90,7 @@ static void ga_concat_shorten_esc(garray_T *gap, const char_u *str)
     const char_u *s = p;
     const int c = mb_ptr2char_adv(&s);
     const int clen = (int)(s - p);
-    while (*s != NUL && c == utf_ptr2char(s)) {
+    while (*s != NUL && c == utf_ptr2char((char *)s)) {
       same_len++;
       s += clen;
     }
@@ -178,7 +178,7 @@ static int assert_match_common(typval_T *argvars, assert_type_T atype)
 
   if (pat == NULL || text == NULL) {
     emsg(_(e_invarg));
-  } else if (pattern_match((char_u *)pat, (char_u *)text, false)
+  } else if (pattern_match((char *)pat, (char *)text, false)
              != (atype == ASSERT_MATCH)) {
     garray_T ga;
     prepare_assert_error(&ga);
@@ -559,4 +559,3 @@ void f_test_write_list_log(typval_T *const argvars, typval_T *const rettv, FunPt
   }
   list_write_log(fname);
 }
-

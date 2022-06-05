@@ -492,6 +492,10 @@ describe('lua stdlib', function()
 
   it('vim.tbl_get', function()
     eq(true, exec_lua("return vim.tbl_get({ test = { nested_test = true }}, 'test', 'nested_test')"))
+    eq(NIL, exec_lua("return vim.tbl_get({ unindexable = true }, 'unindexable', 'missing_key')"))
+    eq(NIL, exec_lua("return vim.tbl_get({ unindexable = 1 }, 'unindexable', 'missing_key')"))
+    eq(NIL, exec_lua("return vim.tbl_get({ unindexable = coroutine.create(function () end) }, 'unindexable', 'missing_key')"))
+    eq(NIL, exec_lua("return vim.tbl_get({ unindexable = function () end }, 'unindexable', 'missing_key')"))
     eq(NIL, exec_lua("return vim.tbl_get({}, 'missing_key')"))
     eq(NIL, exec_lua("return vim.tbl_get({})"))
   end)
@@ -645,17 +649,17 @@ describe('lua stdlib', function()
       return vim.tbl_islist(c) and count == 0
     ]]))
 
-    eq(exec_lua([[
+    eq({a = {b = 1}}, exec_lua([[
       local a = { a = { b = 1 } }
       local b = { a = {} }
       return vim.tbl_deep_extend("force", a, b)
-    ]]), {a = {b = 1}})
+    ]]))
 
-    eq(exec_lua([[
+    eq({a = {b = 1}}, exec_lua([[
       local a = { a = 123 }
       local b = { a = { b = 1} }
       return vim.tbl_deep_extend("force", a, b)
-    ]]), {a = {b = 1}})
+    ]]))
 
     ok(exec_lua([[
       local a = { a = {[2] = 3} }
@@ -664,11 +668,11 @@ describe('lua stdlib', function()
       return vim.deep_equal(c, {a = {[3] = 3}})
     ]]))
 
-    eq(exec_lua([[
+    eq({a = 123}, exec_lua([[
       local a = { a = { b = 1} }
       local b = { a = 123 }
       return vim.tbl_deep_extend("force", a, b)
-    ]]), {a = 123 })
+    ]]))
 
     matches('invalid "behavior": nil',
       pcall_err(exec_lua, [[
@@ -788,6 +792,20 @@ describe('lua stdlib', function()
   it('vim.fn should error when calling API function', function()
       matches('Tried to call API function with vim.fn: use vim.api.nvim_get_current_line instead',
           pcall_err(exec_lua, "vim.fn.nvim_get_current_line()"))
+  end)
+
+  it('vim.fn is allowed in "fast" context by some functions #18306', function()
+    exec_lua([[
+      local timer = vim.loop.new_timer()
+      timer:start(0, 0, function()
+        timer:close()
+        assert(vim.in_fast_event())
+        vim.g.fnres = vim.fn.iconv('hello', 'utf-8', 'utf-8')
+      end)
+    ]])
+
+    helpers.poke_eventloop()
+    eq('hello', exec_lua[[return vim.g.fnres]])
   end)
 
   it('vim.rpcrequest and vim.rpcnotify', function()
@@ -2753,6 +2771,39 @@ describe('vim.keymap', function()
 
     eq(1, exec_lua[[return GlobalCount]])
     eq('\nNo mapping found', helpers.exec_capture('nmap asdf'))
+  end)
+
+  it('works with buffer-local mappings', function()
+    eq(0, exec_lua [[
+      GlobalCount = 0
+      vim.keymap.set('n', 'asdf', function() GlobalCount = GlobalCount + 1 end, {buffer=true})
+      return GlobalCount
+    ]])
+
+    feed('asdf\n')
+
+    eq(1, exec_lua[[return GlobalCount]])
+
+    exec_lua [[
+      vim.keymap.del('n', 'asdf', {buffer=true})
+    ]]
+
+    feed('asdf\n')
+
+    eq(1, exec_lua[[return GlobalCount]])
+    eq('\nNo mapping found', helpers.exec_capture('nmap asdf'))
+  end)
+
+  it('does not mutate the opts parameter', function()
+    eq(true, exec_lua [[
+      opts = {buffer=true}
+      vim.keymap.set('n', 'asdf', function() end, opts)
+      return opts.buffer
+    ]])
+    eq(true, exec_lua [[
+      vim.keymap.del('n', 'asdf', opts)
+      return opts.buffer
+    ]])
   end)
 
   it('can do <Plug> mappings', function()

@@ -28,6 +28,7 @@ return {
     "line_hl_group";
     "cursorline_hl_group";
     "conceal";
+    "ui_watched";
   };
   keymap = {
     "noremap";
@@ -52,6 +53,7 @@ return {
     "force";
     "keepscript";
     "nargs";
+    "preview";
     "range";
     "register";
   };
@@ -79,10 +81,13 @@ return {
     "maxwidth";
     "fillchar";
     "highlights";
+    "use_winbar";
     "use_tabline";
   };
   option = {
     "scope";
+    "win";
+    "buf";
   };
   highlight = {
     "bold";
@@ -144,6 +149,7 @@ return {
     "group";
     "modeline";
     "pattern";
+    "data";
   };
   get_autocmds = {
     "event";
@@ -153,6 +159,45 @@ return {
   };
   create_augroup = {
     "clear";
+  };
+  cmd = {
+    "cmd";
+    "range";
+    "count";
+    "reg";
+    "bang";
+    "args";
+    "magic";
+    "mods";
+    "nargs";
+    "addr";
+    "nextcmd";
+  };
+  cmd_magic = {
+    "file";
+    "bar";
+  };
+  cmd_mods = {
+    "silent";
+    "emsg_silent";
+    "sandbox";
+    "noautocmd";
+    "browse";
+    "confirm";
+    "hide";
+    "keepalt";
+    "keepjumps";
+    "keepmarks";
+    "keeppatterns";
+    "lockmarks";
+    "noswapfile";
+    "tab";
+    "verbose";
+    "vertical";
+    "split";
+  };
+  cmd_opts = {
+    "output";
   };
 }
 

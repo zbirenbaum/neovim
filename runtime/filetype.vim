@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2022 Apr 07
+" Last Change:	2022 Jun 03
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -151,14 +151,21 @@ au BufNewFile,BufRead *.asp
 	\   setf aspvbs |
 	\ endif
 
-" Grub (must be before catch *.lst)
+" Grub (must be before pattern *.lst)
 au BufNewFile,BufRead */boot/grub/menu.lst,*/boot/grub/grub.conf,*/etc/grub.conf setf grub
+
+" Maxima, see:
+" https://maxima.sourceforge.io/docs/manual/maxima_71.html#file_005ftype_005fmaxima
+" Must be before the pattern *.mac.
+" *.dem omitted - also used by gnuplot demos
+" *.mc omitted - used by dist#ft#McSetf()
+au BufNewFile,BufRead *.demo,*.dm{1,2,3,t},*.wxm,maxima-init.mac setf maxima
 
 " Assembly (all kinds)
 " *.lst is not pure assembly, it has two extra columns (address, byte codes)
 au BufNewFile,BufRead *.asm,*.[sS],*.[aA],*.mac,*.lst	call dist#ft#FTasm()
 
-" Macro (VAX)
+" Assembly - Macro (VAX)
 au BufNewFile,BufRead *.mar			setf vmasm
 
 " Atlas
@@ -398,7 +405,7 @@ au BufNewFile,BufRead *.cu,*.cuh		setf cuda
 
 " Dockerfile; Podman uses the same syntax with name Containerfile
 " Also see Dockerfile.* below.
-au BufNewFile,BufRead Containerfile,Dockerfile,*.Dockerfile	setf dockerfile
+au BufNewFile,BufRead Containerfile,Dockerfile,dockerfile,*.[dD]ockerfile	setf dockerfile
 
 " WildPackets EtherPeek Decoder
 au BufNewFile,BufRead *.dcd			setf dcd
@@ -708,6 +715,9 @@ au BufNewFile,BufRead *.git/*
 " Gkrellmrc
 au BufNewFile,BufRead gkrellmrc,gkrellmrc_?	setf gkrellmrc
 
+" Gleam
+au BufNewFile,BufRead *.gleam			setf gleam
+
 " GLSL
 au BufNewFile,BufRead *.glsl			setf glsl
 
@@ -805,11 +815,15 @@ au BufNewFile,BufRead *.hjson			setf hjson
 " Hollywood
 au BufRead,BufNewFile *.hws			setf hollywood
 
+" Hoon
+au BufRead,BufNewFile *.hoon			setf hoon
+
 " Tilde (must be before HTML)
 au BufNewFile,BufRead *.t.html			setf tilde
 
 " HTML (.shtml and .stm for server side)
 au BufNewFile,BufRead *.html,*.htm,*.shtml,*.stm  call dist#ft#FThtml()
+au BufNewFile,BufRead *.cshtml			setf html
 
 " HTML with Ruby - eRuby
 au BufNewFile,BufRead *.erb,*.rhtml		setf eruby
@@ -1009,6 +1023,9 @@ au BufNewFile,BufRead *.ll			setf lifelines
 " Lilo: Linux loader
 au BufNewFile,BufRead lilo.conf			setf lilo
 
+" Lilypond
+au BufNewFile,BufRead *.ly,*.ily		setf lilypond
+
 " Lisp (*.el = ELisp, *.cl = Common Lisp)
 " *.jl was removed, it's also used for Julia, better skip than guess wrong.
 if has("fname_case")
@@ -1154,6 +1171,9 @@ au BufNewFile,BufRead *.isc,*.monk,*.ssc,*.tsc	setf monk
 " MOO
 au BufNewFile,BufRead *.moo			setf moo
 
+" Moonscript
+au BufNewFile,BufRead *.moon			setf moonscript
+
 " Modconf
 au BufNewFile,BufRead */etc/modules.conf,*/etc/modules,*/etc/conf.modules setf modconf
 
@@ -1266,27 +1286,30 @@ au BufNewFile,BufRead opam,*.opam,*.opam.template setf opam
 au BufNewFile,BufRead [a-zA-Z0-9]*Dict\(.*\)\=,[a-zA-Z]*Properties\(.*\)\=,*Transport\(.*\),fvSchemes,fvSolution,fvConstrains,fvModels,*/constant/g,*/0\(\.orig\)\=/* call dist#ft#FTfoam()
 
 " OpenROAD
-au BufNewFile,BufRead *.or			setf openroad
+au BufNewFile,BufRead *.or				setf openroad
 
 " OPL
-au BufNewFile,BufRead *.[Oo][Pp][Ll]		setf opl
+au BufNewFile,BufRead *.[Oo][Pp][Ll]			setf opl
+
+" OpenSCAD
+au BufNewFile,BufRead *.scad				setf openscad		
 
 " Oracle config file
-au BufNewFile,BufRead *.ora			setf ora
+au BufNewFile,BufRead *.ora				setf ora
 
 " Org
-au BufNewFile,BufRead *.org,*.org_archive	setf org
+au BufNewFile,BufRead *.org,*.org_archive		setf org
 
 " Packet filter conf
-au BufNewFile,BufRead pf.conf			setf pf
+au BufNewFile,BufRead pf.conf				setf pf
 
-" Pacman Config (close enough to dosini)
-au BufNewFile,BufRead */etc/pacman.conf		setf dosini
+" ini style config files, using # comments
+au BufNewFile,BufRead */etc/pacman.conf,mpv.conf	setf confini
 
 " Pacman hooks
 au BufNewFile,BufRead *.hook
 	\ if getline(1) == '[Trigger]' |
-	\   setf dosini |
+	\   setf conf |
 	\ endif
 
 " Pam conf
@@ -1296,36 +1319,36 @@ au BufNewFile,BufRead */etc/pam.conf			setf pamconf
 au BufNewFile,BufRead pam_env.conf,.pam_environment	setf pamenv
 
 " PApp
-au BufNewFile,BufRead *.papp,*.pxml,*.pxsl	setf papp
+au BufNewFile,BufRead *.papp,*.pxml,*.pxsl		setf papp
 
 " Password file
 au BufNewFile,BufRead */etc/passwd,*/etc/passwd-,*/etc/passwd.edit,*/etc/shadow,*/etc/shadow-,*/etc/shadow.edit,*/var/backups/passwd.bak,*/var/backups/shadow.bak setf passwd
 
 " Pascal (also *.p, *.pp, *.inc)
-au BufNewFile,BufRead *.pas			setf pascal
+au BufNewFile,BufRead *.pas				setf pascal
 
 " Pascal or Puppet manifest
-au BufNewFile,BufRead *.pp			call dist#ft#FTpp()
+au BufNewFile,BufRead *.pp				call dist#ft#FTpp()
 
 " Delphi or Lazarus program file
-au BufNewFile,BufRead *.dpr,*.lpr		setf pascal
+au BufNewFile,BufRead *.dpr,*.lpr			setf pascal
 
 " Free Pascal makefile definition file
-au BufNewFile,BufRead *.fpc			setf fpcmake
+au BufNewFile,BufRead *.fpc				setf fpcmake
 
 " PDF
-au BufNewFile,BufRead *.pdf			setf pdf
+au BufNewFile,BufRead *.pdf				setf pdf
 
 " PCMK - HAE - crm configure edit
-au BufNewFile,BufRead *.pcmk			setf pcmk
+au BufNewFile,BufRead *.pcmk				setf pcmk
 
 " Perl
 if has("fname_case")
-  au BufNewFile,BufRead *.pl,*.PL		call dist#ft#FTpl()
+  au BufNewFile,BufRead *.pl,*.PL			call dist#ft#FTpl()
 else
-  au BufNewFile,BufRead *.pl			call dist#ft#FTpl()
+  au BufNewFile,BufRead *.pl				call dist#ft#FTpl()
 endif
-au BufNewFile,BufRead *.plx,*.al,*.psgi		setf perl
+au BufNewFile,BufRead *.plx,*.al,*.psgi			setf perl
 
 " Perl, XPM or XPM2
 au BufNewFile,BufRead *.pm
@@ -1571,6 +1594,9 @@ au BufNewFile,BufRead *.rng			setf rng
 " RPL/2
 au BufNewFile,BufRead *.rpl			setf rpl
 
+" Robot Framework
+au BufNewFile,BufRead *.robot,*.resource	setf robot
+
 " Robots.txt
 au BufNewFile,BufRead robots.txt		setf robots
 
@@ -1668,7 +1694,8 @@ au BufNewFile,BufRead *.siv,*.sieve		setf sieve
 " Sendmail
 au BufNewFile,BufRead sendmail.cf		setf sm
 
-" Sendmail .mc files are actually m4.  Could also be MS Message text file.
+" Sendmail .mc files are actually m4.  Could also be MS Message text file or
+" Maxima.
 au BufNewFile,BufRead *.mc			call dist#ft#McSetf()
 
 " Services
@@ -2103,6 +2130,9 @@ au BufNewFile,BufRead *.wm			setf webmacro
 
 " Wget config
 au BufNewFile,BufRead .wgetrc,wgetrc		setf wget
+
+" Wget2 config
+au BufNewFile,BufRead .wget2rc,wget2rc		setf wget2
 
 " Website MetaLanguage
 au BufNewFile,BufRead *.wml			setf wml

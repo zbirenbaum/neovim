@@ -278,10 +278,39 @@ func Test_format_c_comment()
                       //
   END
   call assert_equal(expected, getline(1, '$'))
+  3delete
+
+  " No comment repeated with a slash in 'formatoptions'
+  set fo+=/
+  normal 2Gox
+  let expected =<< trim END
+      nop;
+      val = val;      // This is a comment
+      x
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  " Comment is formatted when it wraps
+  normal 2GA with some more text added
+  let expected =<< trim END
+      nop;
+      val = val;      // This is a comment
+                      // with some more text
+                      // added
+      x
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  set fo-=/
 
   " using 'indentexpr' instead of 'cindent' does not repeat a comment
   setl nocindent indentexpr=2
-  3delete
+  %del
+  let text =<< trim END
+      nop;
+      val = val;      // This is a comment
+  END
+  call setline(1, text)
   normal 2Gox
   let expected =<< trim END
       nop;
@@ -327,6 +356,18 @@ func Test_format_c_comment()
       {
          val = val;      // This is a comment
          x
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  " typing comment text auto-wraps
+  %del
+  call setline(1, text)
+  exe "normal! 2GA blah more text blah.\<Esc>"
+  let expected =<< trim END
+      {
+         val = val;      // This is a comment
+                         // blah more text
+                         // blah.
   END
   call assert_equal(expected, getline(1, '$'))
 

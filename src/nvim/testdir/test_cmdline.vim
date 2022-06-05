@@ -1212,4 +1212,28 @@ func Test_recalling_cmdline()
   cunmap <Plug>(save-cmdline)
 endfunc
 
+func Check_completion()
+  call assert_equal('let a', getcmdline())
+  call assert_equal(6, getcmdpos())
+  call assert_equal(7, getcmdscreenpos())
+  call assert_equal('var', getcmdcompltype())
+  return ''
+endfunc
+
+func Test_screenpos_and_completion()
+  call feedkeys(":let a\<C-R>=Check_completion()\<CR>\<Esc>", "xt")
+endfunc
+
+func Test_recursive_register()
+  let @= = ''
+  silent! ?e/
+  let caught = 'no'
+  try
+    normal // 
+  catch /E169:/
+    let caught = 'yes'
+  endtry
+  call assert_equal('yes', caught)
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab

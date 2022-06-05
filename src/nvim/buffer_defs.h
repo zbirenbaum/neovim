@@ -6,6 +6,8 @@
 // for FILE
 #include <stdio.h>
 
+#include "grid_defs.h"
+
 typedef struct file_buffer buf_T;  // Forward declaration
 
 // Reference to a buffer that stores the value of buf_free_count.
@@ -102,8 +104,6 @@ typedef uint64_t disptick_T;  // display tick type
 
 // for struct memline (it needs memfile_T)
 #include "nvim/memline_defs.h"
-// for struct memfile, bhdr_T, blocknr_T... (it needs buf_T)
-#include "nvim/memfile_defs.h"
 
 // for regprog_T. Needs win_T and buf_T.
 #include "nvim/regexp_defs.h"
@@ -178,7 +178,7 @@ typedef struct {
 #define w_p_fdi w_onebuf_opt.wo_fdi    // 'foldignore'
   long wo_fdl;
 #define w_p_fdl w_onebuf_opt.wo_fdl    // 'foldlevel'
-  int wo_fdl_save;
+  long wo_fdl_save;
   // 'foldlevel' state saved for diff mode
 #define w_p_fdl_save w_onebuf_opt.wo_fdl_save
   char_u *wo_fdm;
@@ -235,6 +235,8 @@ typedef struct {
 #define w_p_sbr w_onebuf_opt.wo_sbr    // 'showbreak'
   char_u *wo_stl;
 #define w_p_stl w_onebuf_opt.wo_stl     // 'statusline'
+  char *wo_wbr;
+#define w_p_wbr w_onebuf_opt.wo_wbr   // 'winbar'
   int wo_scb;
 #define w_p_scb w_onebuf_opt.wo_scb    // 'scrollbind'
   int wo_diff_saved;           // options were saved for starting diff mode
@@ -358,6 +360,8 @@ struct mapblock {
   LuaRef m_luaref;         // lua function reference as rhs
   int m_keylen;                 // strlen(m_keys)
   int m_mode;                   // valid mode
+  int m_simplified;             // m_keys was simplified, do no use this map
+                                // if keys are typed
   int m_noremap;                // if non-zero no re-mapping for m_str
   char m_silent;                // <silent> used, don't echo commands
   char m_nowait;                // <nowait> used
@@ -532,19 +536,19 @@ struct file_buffer {
   int b_flags;                  // various BF_ flags
   int b_locked;                 // Buffer is being closed or referenced, don't
                                 // let autocommands wipe it out.
+  int b_locked_split;           // Buffer is being closed, don't allow opening
+                                // a new window with it.
   int b_ro_locked;              // Non-zero when the buffer can't be changed.
                                 // Used for FileChangedRO
 
-  //
   // b_ffname   has the full path of the file (NULL for no name).
   // b_sfname   is the name as the user typed it (or NULL).
   // b_fname    is the same as b_sfname, unless ":cd" has been done,
   //            then it is the same as b_ffname (NULL for no name).
-  //
   char_u *b_ffname;        // full path file name, allocated
   char_u *b_sfname;        // short file name, allocated, may be equal to
                            // b_ffname
-  char_u *b_fname;         // current file name, points to b_ffname or
+  char *b_fname;           // current file name, points to b_ffname or
                            // b_sfname
 
   bool file_id_valid;
@@ -1024,6 +1028,7 @@ typedef struct {
   colnr_T startcol;     // in win_line() points to char where HL starts
   colnr_T endcol;       // in win_line() points to char where HL ends
   bool is_addpos;       // position specified directly by matchaddpos()
+  bool has_cursor;      // true if the cursor is inside the match, used for CurSearch
   proftime_T tm;        // for a time limit
 } match_T;
 
@@ -1148,15 +1153,15 @@ typedef struct VimMenu vimmenu_T;
 struct VimMenu {
   int modes;                         ///< Which modes is this menu visible for
   int enabled;                       ///< for which modes the menu is enabled
-  char_u *name;                 ///< Name of menu, possibly translated
-  char_u *dname;                ///< Displayed Name ("name" without '&')
-  char_u *en_name;              ///< "name" untranslated, NULL when
-                                ///< was not translated
-  char_u *en_dname;             ///< NULL when "dname" untranslated
+  char *name;                 ///< Name of menu, possibly translated
+  char *dname;                ///< Displayed Name ("name" without '&')
+  char *en_name;              ///< "name" untranslated, NULL when
+                              ///< was not translated
+  char *en_dname;             ///< NULL when "dname" untranslated
   int mnemonic;                      ///< mnemonic key (after '&')
-  char_u *actext;               ///< accelerator text (after TAB)
+  char *actext;               ///< accelerator text (after TAB)
   long priority;                     ///< Menu order priority
-  char_u *strings[MENU_MODES];  ///< Mapped string for each mode
+  char *strings[MENU_MODES];  ///< Mapped string for each mode
   int noremap[MENU_MODES];           ///< A \ref REMAP_VALUES flag for each mode
   bool silent[MENU_MODES];           ///< A silent flag for each mode
   vimmenu_T *children;             ///< Children of sub-menu
@@ -1234,6 +1239,7 @@ struct window_S {
   struct {
     int stl;
     int stlnc;
+    int wbr;
     int horiz;
     int horizup;
     int horizdown;
@@ -1281,13 +1287,19 @@ struct window_S {
   //
   int w_winrow;                     // first row of window in screen
   int w_height;                     // number of rows in window, excluding
-                                    // status/command/winbar line(s)
+                                    // status/command line(s)
   int w_status_height;              // number of status lines (0 or 1)
+  int w_winbar_height;              // number of window bars (0 or 1)
   int w_wincol;                     // Leftmost column of window in screen.
   int w_width;                      // Width of window, excluding separation.
   int w_hsep_height;                // Number of horizontal separator rows (0 or 1)
   int w_vsep_width;                 // Number of vertical separator columns (0 or 1).
   pos_save_T w_save_cursor;         // backup of cursor pos and topline
+
+  int w_winrow_off;  ///< offset from winrow to the inner window area
+  int w_wincol_off;  ///< offset from wincol to the inner window area
+                     ///< this includes float border but excludes special columns
+                     ///< implemented in win_line() (i.e. signs, folds, numbers)
 
   // inner size of window, which can be overridden by external UI
   int w_height_inner;
@@ -1377,7 +1389,7 @@ struct window_S {
                                     // w_redr_type is REDRAW_TOP
   linenr_T w_redraw_top;            // when != 0: first line needing redraw
   linenr_T w_redraw_bot;            // when != 0: last line needing redraw
-  bool w_redr_status;               // if true status line must be redrawn
+  bool w_redr_status;               // if true statusline/winbar must be redrawn
   bool w_redr_border;               // if true border must be redrawn
 
   // remember what is shown in the ruler for this window (if 'ruler' set)
@@ -1407,6 +1419,7 @@ struct window_S {
 
   // A few options have local flags for P_INSECURE.
   uint32_t w_p_stl_flags;           // flags for 'statusline'
+  uint32_t w_p_wbr_flags;           // flags for 'winbar'
   uint32_t w_p_fde_flags;           // flags for 'foldexpr'
   uint32_t w_p_fdt_flags;           // flags for 'foldtext'
   int *w_p_cc_cols;         // array of columns to highlight or NULL
@@ -1480,6 +1493,16 @@ struct window_S {
   // Location list reference used in the location list window.
   // In a non-location list window, w_llist_ref is NULL.
   qf_info_T *w_llist_ref;
+
+  // Status line click definitions
+  StlClickDefinition *w_status_click_defs;
+  // Size of the w_status_click_defs array
+  size_t w_status_click_defs_size;
+
+  // Window bar click definitions
+  StlClickDefinition *w_winbar_click_defs;
+  // Size of the w_winbar_click_defs array
+  size_t w_winbar_click_defs_size;
 };
 
 static inline int win_hl_attr(win_T *wp, int hlf)

@@ -25,7 +25,7 @@ static bool did_stdio = false;
 /// next free id for a job or rpc channel
 /// 1 is reserved for stdio channel
 /// 2 is reserved for stderr channel
-static uint64_t next_chan_id = CHAN_STDERR+1;
+static uint64_t next_chan_id = CHAN_STDERR + 1;
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "channel.c.generated.h"
@@ -188,7 +188,7 @@ Channel *channel_alloc(ChannelStreamType type)
 
 void channel_create_event(Channel *chan, const char *ext_source)
 {
-#if MIN_LOG_LEVEL <= INFO_LOG_LEVEL
+#if MIN_LOG_LEVEL <= LOGLVL_INF
   const char *source;
 
   if (ext_source) {
@@ -279,12 +279,10 @@ static void channel_destroy_early(Channel *chan)
   multiqueue_put(main_loop.events, free_channel_event, 1, chan);
 }
 
-
 static void close_cb(Stream *stream, void *data)
 {
   channel_decref(data);
 }
-
 
 /// Starts a job and returns the associated channel
 ///
@@ -415,7 +413,6 @@ Channel *channel_job_start(char **argv, CallbackReader on_stdout, CallbackReader
   *status_out = (varnumber_T)chan->id;
   return chan;
 }
-
 
 uint64_t channel_connect(bool tcp, const char *address, bool rpc, CallbackReader on_output,
                          int timeout, const char **error)
@@ -554,7 +551,6 @@ size_t channel_send(uint64_t id, char *data, size_t len, bool data_owned, const 
     written = len;
     goto retfree;
   }
-
 
   Stream *in = channel_instream(chan);
   if (in->closed) {
@@ -739,13 +735,13 @@ static void channel_callback_call(Channel *chan, CallbackReader *reader)
     tv_list_ref(argv[1].vval.v_list);
     ga_clear(&reader->buffer);
     cb = &reader->cb;
-    argv[2].vval.v_string = (char_u *)reader->type;
+    argv[2].vval.v_string = (char *)reader->type;
   } else {
     argv[1].v_type = VAR_NUMBER;
     argv[1].v_lock = VAR_UNLOCKED;
     argv[1].vval.v_number = chan->exit_status;
     cb = &chan->on_exit;
-    argv[2].vval.v_string = (char_u *)"exit";
+    argv[2].vval.v_string = "exit";
   }
 
   argv[2].v_type = VAR_STRING;
@@ -755,7 +751,6 @@ static void channel_callback_call(Channel *chan, CallbackReader *reader)
   callback_call(cb, 3, argv, &rettv);
   tv_clear(&rettv);
 }
-
 
 /// Open terminal for channel
 ///

@@ -63,6 +63,7 @@
 #define EX_MODIFY       0x100000  // forbidden in non-'modifiable' buffer
 #define EX_FLAGS        0x200000  // allow flags after count in argument
 #define EX_KEEPSCRIPT  0x4000000  // keep sctx of where command was invoked
+#define EX_PREVIEW     0x8000000  // allow incremental command preview
 #define EX_FILES (EX_XFILE | EX_EXTRA)  // multiple extra files allowed
 #define EX_FILE1 (EX_FILES | EX_NOSPC)  // 1 file, defaults to current file
 #define EX_WORD1 (EX_EXTRA | EX_NOSPC)  // one extra word allowed
@@ -91,6 +92,7 @@ typedef struct exarg exarg_T;
 #define BAD_DROP        (-2)    // erase it
 
 typedef void (*ex_func_T)(exarg_T *eap);
+typedef int (*ex_preview_func_T)(exarg_T *eap, long cmdpreview_ns, handle_T cmdpreview_bufnr);
 
 // NOTE: These possible could be removed and changed so that
 // Callback could take a "command" style string, and simply
@@ -114,21 +116,22 @@ typedef struct aucmd_executable_t AucmdExecutable;
 struct aucmd_executable_t {
   AucmdExecutableType type;
   union {
-    char_u *cmd;
+    char *cmd;
     Callback cb;
   } callable;
 };
 
 #define AUCMD_EXECUTABLE_INIT { .type = CALLABLE_NONE }
 
-typedef char_u *(*LineGetter)(int, void *, int, bool);
+typedef char *(*LineGetter)(int, void *, int, bool);
 
 /// Structure for command definition.
 typedef struct cmdname {
-  char_u *cmd_name;    ///< Name of the command.
-  ex_func_T cmd_func;  ///< Function with implementation of this command.
-  uint32_t cmd_argt;     ///< Relevant flags from the declared above.
-  cmd_addr_T cmd_addr_type;  ///< Flag for address type
+  char *cmd_name;                         ///< Name of the command.
+  ex_func_T cmd_func;                     ///< Function with implementation of this command.
+  ex_preview_func_T cmd_preview_func;     ///< Preview callback function of this command.
+  uint32_t cmd_argt;                      ///< Relevant flags from the declared above.
+  cmd_addr_T cmd_addr_type;               ///< Flag for address type.
 } CommandDefinition;
 
 // A list used for saving values of "emsg_silent".  Used by ex_try() to save the
@@ -174,10 +177,13 @@ enum {
 
 /// Arguments used for Ex commands.
 struct exarg {
-  char_u *arg;             ///< argument of the command
-  char_u *nextcmd;         ///< next command (NULL if none)
-  char_u *cmd;             ///< the name of the command (except for :make)
-  char_u **cmdlinep;       ///< pointer to pointer of allocated cmdline
+  char *arg;                    ///< argument of the command
+  char **args;                  ///< starting position of command arguments
+  size_t *arglens;              ///< length of command arguments
+  size_t argc;                  ///< number of command arguments
+  char *nextcmd;                ///< next command (NULL if none)
+  char *cmd;                    ///< the name of the command (except for :make)
+  char **cmdlinep;              ///< pointer to pointer of allocated cmdline
   cmdidx_T cmdidx;              ///< the index for the command
   uint32_t argt;                ///< flags for the command
   int skip;                     ///< don't execute the command, only parse it
@@ -187,7 +193,7 @@ struct exarg {
   linenr_T line2;               ///< the second line number or count
   cmd_addr_T addr_type;         ///< type of the count/range
   int flags;                    ///< extra flags after count: EXFLAG_
-  char_u *do_ecmd_cmd;     ///< +command arg to be used in edited file
+  char *do_ecmd_cmd;            ///< +command arg to be used in edited file
   linenr_T do_ecmd_lnum;        ///< the line number in an edited file
   int append;                   ///< TRUE with ":w >>file" command
   int usefilter;                ///< TRUE with ":w !command" and ":r!command"
@@ -201,7 +207,7 @@ struct exarg {
   int useridx;                  ///< user command index
   char *errmsg;                 ///< returned error message
   LineGetter getline;           ///< Function used to get the next line
-  void *cookie;               ///< argument for getline()
+  void *cookie;                 ///< argument for getline()
   cstack_T *cstack;             ///< condition stack for ":if" etc.
   long verbose_save;            ///< saved value of p_verbose
   int save_msg_silent;          ///< saved value of msg_silent
@@ -219,10 +225,10 @@ struct exarg {
 
 // used for completion on the command line
 struct expand {
-  char_u *xp_pattern;           // start of item to expand
+  char *xp_pattern;             // start of item to expand
   int xp_context;               // type of expansion
   size_t xp_pattern_len;        // bytes in xp_pattern before cursor
-  char_u *xp_arg;               // completion function
+  char *xp_arg;                 // completion function
   LuaRef xp_luaref;             // Ref to Lua completion function
   sctx_T xp_script_ctx;         // SCTX for completion function
   int xp_backslash;             // one of the XP_BS_ values
@@ -232,8 +238,8 @@ struct expand {
 #endif
   int xp_numfiles;              // number of files found by file name completion
   int xp_col;                   // cursor position in line
-  char_u **xp_files;            // list of files
-  char_u *xp_line;              // text being completed
+  char **xp_files;              // list of files
+  char *xp_line;                // text being completed
 };
 
 // values for xp_backslash
@@ -256,9 +262,23 @@ typedef struct {
   bool keeppatterns;           ///< true when ":keeppatterns" was used
   bool lockmarks;              ///< true when ":lockmarks" was used
   bool noswapfile;             ///< true when ":noswapfile" was used
-  char_u *save_ei;             ///< saved value of 'eventignore'
+  char *save_ei;               ///< saved value of 'eventignore'
   regmatch_T filter_regmatch;  ///< set by :filter /pat/
   bool filter_force;           ///< set for :filter!
 } cmdmod_T;
+
+/// Stores command modifier info used by `nvim_parse_cmd`
+typedef struct {
+  bool silent;
+  bool emsg_silent;
+  bool sandbox;
+  bool noautocmd;
+  long verbose;
+  cmdmod_T cmdmod;
+  struct {
+    bool file;
+    bool bar;
+  } magic;
+} CmdParseInfo;
 
 #endif  // NVIM_EX_CMDS_DEFS_H

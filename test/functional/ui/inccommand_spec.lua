@@ -123,13 +123,11 @@ describe(":substitute, inccommand=split interactivity", function()
   it("no preview if invoked by feedkeys()", function()
     -- in a script...
     source([[:call feedkeys(":%s/tw/MO/g\<CR>")]])
-    poke_eventloop()
     -- or interactively...
-    feed([[:call feedkeys(":%s/tw/MO/g\<CR>")<CR>]])
-    poke_eventloop()
+    feed([[:call feedkeys(":%s/bs/BUU/g\<lt>CR>")<CR>]])
     eq(1, eval("bufnr('$')"))
     -- sanity check: assert the buffer state
-    expect(default_text:gsub("tw", "MO"))
+    expect(default_text:gsub("tw", "MO"):gsub("bs", "BUU"))
   end)
 end)
 
@@ -257,42 +255,6 @@ describe(":substitute, 'inccommand' preserves", function()
     end)
   end
 
-  for _, case in pairs{"", "split", "nosplit"} do
-    it("visual selection for non-previewable command (inccommand="..case..") #5888", function()
-      local screen = Screen.new(30,10)
-      common_setup(screen, case, default_text)
-      feed('1G2V')
-
-      feed(':s')
-      screen:expect([[
-        {vis:Inc substitution on}           |
-        t{vis:wo lines}                     |
-                                      |
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        :'<,'>s^                       |
-      ]])
-
-      feed('o')
-      screen:expect([[
-        {vis:Inc substitution on}           |
-        t{vis:wo lines}                     |
-                                      |
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        {15:~                             }|
-        :'<,'>so^                      |
-      ]])
-    end)
-  end
-
   for _, case in ipairs({'', 'split', 'nosplit'}) do
     it('previous substitute string ~ (inccommand='..case..') #12109', function()
       local screen = Screen.new(30,10)
@@ -381,7 +343,7 @@ describe(":substitute, 'inccommand' preserves undo", function()
   }
 
   local function test_sub(substring, split, redoable)
-    clear()
+    command('bwipe!')
     feed_command("set inccommand=" .. split)
 
     insert("1")
@@ -407,7 +369,7 @@ describe(":substitute, 'inccommand' preserves undo", function()
   end
 
   local function test_notsub(substring, split, redoable)
-    clear()
+    command('bwipe!')
     feed_command("set inccommand=" .. split)
 
     insert("1")
@@ -441,7 +403,7 @@ describe(":substitute, 'inccommand' preserves undo", function()
 
 
   local function test_threetree(substring, split)
-    clear()
+    command('bwipe!')
     feed_command("set inccommand=" .. split)
 
     insert("1")
@@ -492,6 +454,8 @@ describe(":substitute, 'inccommand' preserves undo", function()
       1
       2]])
   end
+
+  before_each(clear)
 
   it("at a non-leaf of the undo tree", function()
    for _, case in pairs(cases) do
@@ -1343,6 +1307,108 @@ describe(":substitute, inccommand=split", function()
     ]])
   end)
 
+  it([[preview changes correctly with c_CTRL-R_= and c_CTRL-\_e]], function()
+    feed('gg')
+    feed(":1,2s/t/X")
+    screen:expect([[
+      Inc subs{12:X}itution on           |
+      {12:X}wo lines                     |
+      Inc substitution on           |
+      two lines                     |
+                                    |
+      {11:[No Name] [+]                 }|
+      |1| Inc subs{12:X}itution on       |
+      |2| {12:X}wo lines                 |
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {10:[Preview]                     }|
+      :1,2s/t/X^                     |
+    ]])
+
+    feed([[<C-R>='Y']])
+    -- preview should be unchanged during c_CTRL-R_= editing
+    screen:expect([[
+      Inc subs{12:X}itution on           |
+      {12:X}wo lines                     |
+      Inc substitution on           |
+      two lines                     |
+                                    |
+      {11:[No Name] [+]                 }|
+      |1| Inc subs{12:X}itution on       |
+      |2| {12:X}wo lines                 |
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {10:[Preview]                     }|
+      ={1:'Y'}^                          |
+    ]])
+
+    feed('<CR>')
+    -- preview should be changed by the result of the expression
+    screen:expect([[
+      Inc subs{12:XY}itution on          |
+      {12:XY}wo lines                    |
+      Inc substitution on           |
+      two lines                     |
+                                    |
+      {11:[No Name] [+]                 }|
+      |1| Inc subs{12:XY}itution on      |
+      |2| {12:XY}wo lines                |
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {10:[Preview]                     }|
+      :1,2s/t/XY^                    |
+    ]])
+
+    feed([[<C-\>e'echo']])
+    -- preview should be unchanged during c_CTRL-\_e editing
+    screen:expect([[
+      Inc subs{12:XY}itution on          |
+      {12:XY}wo lines                    |
+      Inc substitution on           |
+      two lines                     |
+                                    |
+      {11:[No Name] [+]                 }|
+      |1| Inc subs{12:XY}itution on      |
+      |2| {12:XY}wo lines                |
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {10:[Preview]                     }|
+      ={1:'echo'}^                       |
+    ]])
+
+    feed('<CR>')
+    -- preview should be cleared if command is changed to a non-previewable one
+    screen:expect([[
+      Inc substitution on           |
+      two lines                     |
+      Inc substitution on           |
+      two lines                     |
+                                    |
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      {15:~                             }|
+      :echo^                         |
+    ]])
+  end)
+
 end)
 
 describe("inccommand=nosplit", function()
@@ -1646,10 +1712,12 @@ end)
 
 describe("'inccommand' and :cnoremap", function()
   local cases = { "",  "split", "nosplit" }
+  local screen
 
-  local function refresh(case)
+  local function refresh(case, visual)
     clear()
-    common_setup(nil, case, default_text)
+    screen = visual and Screen.new(50,10) or nil
+    common_setup(screen, case, default_text)
   end
 
   it('work with remapped characters', function()
@@ -1706,10 +1774,12 @@ describe("'inccommand' and :cnoremap", function()
 
   it('still works with a broken mapping', function()
     for _, case in pairs(cases) do
-      refresh(case)
+      refresh(case, true)
       feed_command("cnoremap <expr> x execute('bwipeout!')[-1].'x'")
 
       feed(":%s/tw/tox<enter>")
+      screen:expect{any=[[{14:^E523:]]}
+      feed('<c-c>')
 
       -- error thrown b/c of the mapping
       neq(nil, eval('v:errmsg'):find('^E523:'))
@@ -1858,26 +1928,26 @@ describe("'inccommand' split windows", function()
     feed_command("split")
     feed(":%s/tw")
     screen:expect([[
-      Inc substitution on {10:│}Inc substitution on|
-      {12:tw}o lines           {10:│}{12:tw}o lines          |
-                          {10:│}                   |
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {11:[No Name] [+]       }{10:│}{15:~                  }|
-      Inc substitution on {10:│}{15:~                  }|
-      {12:tw}o lines           {10:│}{15:~                  }|
-                          {10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
+      Inc substitution on │Inc substitution on|
+      {12:tw}o lines           │{12:tw}o lines          |
+                          │                   |
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {11:[No Name] [+]       }│{15:~                  }|
+      Inc substitution on │{15:~                  }|
+      {12:tw}o lines           │{15:~                  }|
+                          │{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
       {10:[No Name] [+]        [No Name] [+]      }|
       |2| {12:tw}o lines                           |
       {15:~                                       }|
@@ -1897,20 +1967,20 @@ describe("'inccommand' split windows", function()
 
     feed(":%s/tw")
     screen:expect([[
-      Inc substitution on {10:│}Inc substitution on|
-      {12:tw}o lines           {10:│}{12:tw}o lines          |
-                          {10:│}                   |
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
-      {15:~                   }{10:│}{15:~                  }|
+      Inc substitution on │Inc substitution on|
+      {12:tw}o lines           │{12:tw}o lines          |
+                          │                   |
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
+      {15:~                   }│{15:~                  }|
       {11:[No Name] [+]        }{10:[No Name] [+]      }|
       Inc substitution on                     |
       {12:tw}o lines                               |

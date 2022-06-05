@@ -53,7 +53,6 @@ static uint32_t *buf_ns_ref(buf_T *buf, uint32_t ns_id, bool put)
   return map_ref(uint32_t, uint32_t)(buf->b_extmark_ns, ns_id, put);
 }
 
-
 /// Create or update an extmark
 ///
 /// must not be used during iteration!
@@ -69,7 +68,8 @@ void extmark_set(buf_T *buf, uint32_t ns_id, uint32_t *idp, int row, colnr_T col
   if (decor) {
     if (kv_size(decor->virt_text)
         || kv_size(decor->virt_lines)
-        || decor_has_sign(decor)) {
+        || decor_has_sign(decor)
+        || decor->ui_watched) {
       decor_full = true;
       decor = xmemdup(decor, sizeof *decor);
     }
@@ -360,7 +360,6 @@ ExtmarkInfo extmark_from_id(buf_T *buf, uint32_t ns_id, uint32_t id)
   return ret;
 }
 
-
 /// free extmarks from the buffer
 void extmark_free_all(buf_T *buf)
 {
@@ -389,7 +388,6 @@ void extmark_free_all(buf_T *buf)
   map_destroy(uint32_t, uint32_t)(buf->b_extmark_ns);
   map_init(uint32_t, uint32_t, buf->b_extmark_ns);
 }
-
 
 /// Save info for undo/redo of set marks
 static void u_extmark_set(buf_T *buf, uint64_t mark, int row, colnr_T col)
@@ -426,7 +424,7 @@ void u_extmark_copy(buf_T *buf, int l_row, colnr_T l_col, int u_row, colnr_T u_c
   ExtmarkUndoObject undo;
 
   MarkTreeIter itr[1] = { 0 };
-  marktree_itr_get(buf->b_marktree, l_row, l_col, itr);
+  marktree_itr_get(buf->b_marktree, (int32_t)l_row, l_col, itr);
   while (true) {
     mtkey_t mark = marktree_itr_current(itr);
     if (mark.pos.row < 0
@@ -500,7 +498,6 @@ void extmark_apply_undo(ExtmarkUndoObject undo_info, bool undo)
   }
 }
 
-
 /// Adjust extmark row for inserted/deleted rows (columns stay fixed).
 void extmark_adjust(buf_T *buf, linenr_T line1, linenr_T line2, long amount, long amount_after,
                     ExtmarkOp undo)
@@ -512,7 +509,7 @@ void extmark_adjust(buf_T *buf, linenr_T line1, linenr_T line2, long amount, lon
   bcount_t old_byte = 0, new_byte = 0;
   int old_row, new_row;
   if (amount == MAXLNUM) {
-    old_row = (int)(line2 - line1+1);
+    old_row = (int)(line2 - line1 + 1);
     // TODO(bfredl): ej kasta?
     old_byte = (bcount_t)buf->deleted_bytes2;
 
@@ -526,11 +523,11 @@ void extmark_adjust(buf_T *buf, linenr_T line1, linenr_T line2, long amount, lon
     new_row = (int)amount;
   }
   if (new_row > 0) {
-    new_byte = ml_find_line_or_offset(buf, line1+new_row, NULL, true)
+    new_byte = ml_find_line_or_offset(buf, line1 + new_row, NULL, true)
                - start_byte;
   }
   extmark_splice_impl(buf,
-                      (int)line1-1, 0, start_byte,
+                      (int)line1 - 1, 0, start_byte,
                       old_row, 0, old_byte,
                       new_row, 0, new_byte, undo);
 }
@@ -592,8 +589,7 @@ void extmark_splice_impl(buf_T *buf, int start_row, colnr_T start_col, bcount_t 
     u_extmark_copy(buf, start_row, start_col, end_row, end_col);
   }
 
-
-  marktree_splice(buf->b_marktree, start_row, start_col,
+  marktree_splice(buf->b_marktree, (int32_t)start_row, start_col,
                   old_row, old_col,
                   new_row, new_col);
 
@@ -609,18 +605,18 @@ void extmark_splice_impl(buf_T *buf, int start_row, colnr_T start_col, bcount_t 
     // merge algorithm later.
     if (old_row == 0 && new_row == 0 && kv_size(uhp->uh_extmark)) {
       ExtmarkUndoObject *item = &kv_A(uhp->uh_extmark,
-                                      kv_size(uhp->uh_extmark)-1);
+                                      kv_size(uhp->uh_extmark) - 1);
       if (item->type == kExtmarkSplice) {
         ExtmarkSplice *splice = &item->data.splice;
         if (splice->start_row == start_row && splice->old_row == 0
             && splice->new_row == 0) {
           if (old_col == 0 && start_col >= splice->start_col
-              && start_col <= splice->start_col+splice->new_col) {
+              && start_col <= splice->start_col + splice->new_col) {
             splice->new_col += new_col;
             splice->new_byte += new_byte;
             merged = true;
           } else if (new_col == 0
-                     && start_col == splice->start_col+splice->new_col) {
+                     && start_col == splice->start_col + splice->new_col) {
             splice->old_col += old_col;
             splice->old_byte += old_byte;
             merged = true;
@@ -682,7 +678,6 @@ void extmark_move_region(buf_T *buf, int start_row, colnr_T start_col, bcount_t 
   buf_updates_send_splice(buf, new_row, new_col, new_byte,
                           0, 0, 0,
                           extent_row, extent_col, extent_byte);
-
 
   if (undo == kExtmarkUndo) {
     u_header_T *uhp = u_force_get_undo_header(buf);

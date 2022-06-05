@@ -611,7 +611,6 @@ int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, int re
   return OK;
 }
 
-
 // magic at start of undofile
 #define UF_START_MAGIC     "Vim\237UnDo\345"
 #define UF_START_MAGIC_LEN     9
@@ -702,7 +701,7 @@ char *u_get_undo_file_name(const char *const buf_ffname, const bool reading)
       const size_t ffname_len = strlen(ffname);
       undo_file_name = xmalloc(ffname_len + 6);
       memmove(undo_file_name, ffname, ffname_len + 1);
-      char *const tail = (char *)path_tail((char_u *)undo_file_name);
+      char *const tail = path_tail(undo_file_name);
       const size_t tail_len = strlen(tail);
       memmove(tail + 1, tail, tail_len + 1);
       *tail = '.';
@@ -2395,9 +2394,9 @@ static void u_undoredo(int undo, bool do_buf_event)
          * should get rid of, by replacing it with the new line
          */
         if (empty_buffer && lnum == 0) {
-          ml_replace((linenr_T)1, uep->ue_array[i], true);
+          ml_replace((linenr_T)1, (char *)uep->ue_array[i], true);
         } else {
-          ml_append(lnum, uep->ue_array[i], (colnr_T)0, false);
+          ml_append(lnum, (char *)uep->ue_array[i], (colnr_T)0, false);
         }
         xfree(uep->ue_array[i]);
       }
@@ -2418,10 +2417,11 @@ static void u_undoredo(int undo, bool do_buf_event)
 
     changed_lines(top + 1, 0, bot, newsize - oldsize, do_buf_event);
 
-    // set '[ and '] mark
+    // Set the '[ mark.
     if (top + 1 < curbuf->b_op_start.lnum) {
       curbuf->b_op_start.lnum = top + 1;
     }
+    // Set the '] mark.
     if (newsize == 0 && top + 1 > curbuf->b_op_end.lnum) {
       curbuf->b_op_end.lnum = top + 1;
     } else if (top + newsize > curbuf->b_op_end.lnum) {
@@ -2440,6 +2440,14 @@ static void u_undoredo(int undo, bool do_buf_event)
     nuep = uep->ue_next;
     uep->ue_next = newlist;
     newlist = uep;
+  }
+
+  // Ensure the '[ and '] marks are within bounds.
+  if (curbuf->b_op_start.lnum > curbuf->b_ml.ml_line_count) {
+    curbuf->b_op_start.lnum = curbuf->b_ml.ml_line_count;
+  }
+  if (curbuf->b_op_end.lnum > curbuf->b_ml.ml_line_count) {
+    curbuf->b_op_end.lnum = curbuf->b_ml.ml_line_count;
   }
 
   // Adjust Extmarks
@@ -2462,7 +2470,6 @@ static void u_undoredo(int undo, bool do_buf_event)
     buf_updates_unload(curbuf, true);
   }
   // finish Adjusting extmarks
-
 
   curhead->uh_entry = newlist;
   curhead->uh_flags = new_flags;
@@ -3108,9 +3115,9 @@ void u_undoline(void)
   }
 
   oldp = u_save_line(curbuf->b_u_line_lnum);
-  ml_replace(curbuf->b_u_line_lnum, curbuf->b_u_line_ptr, true);
+  ml_replace(curbuf->b_u_line_lnum, (char *)curbuf->b_u_line_ptr, true);
   changed_bytes(curbuf->b_u_line_lnum, 0);
-  extmark_splice_cols(curbuf, (int)curbuf->b_u_line_lnum-1, 0, (colnr_T)STRLEN(oldp),
+  extmark_splice_cols(curbuf, (int)curbuf->b_u_line_lnum - 1, 0, (colnr_T)STRLEN(oldp),
                       (colnr_T)STRLEN(curbuf->b_u_line_ptr), kExtmarkUndo);
   xfree(curbuf->b_u_line_ptr);
   curbuf->b_u_line_ptr = oldp;

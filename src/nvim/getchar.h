@@ -48,10 +48,14 @@ struct map_arguments {
   char_u lhs[MAXMAPLEN + 1];
   size_t lhs_len;
 
+  /// Unsimplifed {lhs} of the mapping. If no simplification has been done then alt_lhs_len is 0.
+  char_u alt_lhs[MAXMAPLEN + 1];
+  size_t alt_lhs_len;
+
   char_u *rhs;  /// The {rhs} of the mapping.
   size_t rhs_len;
-  LuaRef rhs_lua;  /// lua function as rhs
-  bool rhs_is_noop;  /// True when the {orig_rhs} is <nop>.
+  LuaRef rhs_lua;  /// lua function as {rhs}
+  bool rhs_is_noop;  /// True when the {rhs} should be <Nop>.
 
   char_u *orig_rhs;  /// The original text of the {rhs}.
   size_t orig_rhs_len;
@@ -59,7 +63,7 @@ struct map_arguments {
 };
 typedef struct map_arguments MapArguments;
 #define MAP_ARGUMENTS_INIT { false, false, false, false, false, false, false, \
-                             { 0 }, 0, NULL, 0, LUA_NOREF, false, NULL, 0, NULL }
+                             { 0 }, 0, { 0 }, 0, NULL, 0, LUA_NOREF, false, NULL, 0, NULL }
 
 #define KEYLEN_PART_KEY (-1)  // keylen value for incomplete key-code
 #define KEYLEN_PART_MAP (-2)  // keylen value for incomplete mapping

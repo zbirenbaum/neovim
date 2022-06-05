@@ -141,6 +141,7 @@ variables can be used to overrule the filetype used for certain extensions:
 	*.asp		g:filetype_asp	|ft-aspvbs-syntax| |ft-aspperl-syntax|
 	*.bas		g:filetype_bas	|ft-basic-syntax|
 	*.cfg		g:filetype_cfg
+	*.csh		g:filetype_csh  |ft-csh-syntax|
 	*.dat		g:filetype_dat
 	*.frm		g:filetype_frm	|ft-form-syntax|
 	*.fs		g:filetype_fs	|ft-forth-syntax|
@@ -152,6 +153,8 @@ variables can be used to overrule the filetype used for certain extensions:
 	*.pl		g:filetype_pl
 	*.pp		g:filetype_pp	|ft-pascal-syntax|
 	*.prg		g:filetype_prg
+	*.r		g:filetype_r
+	*.sql		g:filetype_sql	|ft-sql-syntax|
 	*.src		g:filetype_src
 	*.sys		g:filetype_sys
 	*.sh		g:bash_is_sh	|ft-sh-syntax|
@@ -257,7 +260,10 @@ C. If your file type can be detected by the file name or extension.
       disabled by setting the did_load_filetypes global variable. If this
       variable exists, $VIMRUNTIME/filetype.vim will not run.
       Example: >
-	" Disable filetype.vim
+	" Disable filetype.vim (but still load filetype.lua if enabled)
+	let g:did_load_filetypes = 0
+
+	" Disable filetype.vim and filetype.lua
 	let g:did_load_filetypes = 1
 
 <  3. To use the new filetype detection you must restart Vim.

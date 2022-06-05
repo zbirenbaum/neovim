@@ -123,6 +123,10 @@ void win_viewport(Integer grid, Window win, Integer topline,
                   Integer line_count)
   FUNC_API_SINCE(7) FUNC_API_REMOTE_ONLY;
 
+void win_extmark(Integer grid, Window win, Integer ns_id, Integer mark_id,
+                 Integer row, Integer col)
+  FUNC_API_SINCE(10) FUNC_API_REMOTE_ONLY;
+
 void popupmenu_show(Array items, Integer selected,
                     Integer row, Integer col, Integer grid)
   FUNC_API_SINCE(3) FUNC_API_REMOTE_ONLY;
@@ -170,4 +174,6 @@ void msg_ruler(Array content)
   FUNC_API_SINCE(6) FUNC_API_REMOTE_ONLY;
 void msg_history_show(Array entries)
   FUNC_API_SINCE(6) FUNC_API_REMOTE_ONLY;
+void msg_history_clear(void)
+  FUNC_API_SINCE(10) FUNC_API_REMOTE_ONLY;
 #endif  // NVIM_API_UI_EVENTS_IN_H

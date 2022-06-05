@@ -12,7 +12,6 @@
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/cursor_shape.h"
-#include "nvim/msgpack_rpc/channel.h"
 #include "nvim/diff.h"
 #include "nvim/event/loop.h"
 #include "nvim/ex_cmds2.h"
@@ -25,6 +24,7 @@
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/move.h"
+#include "nvim/msgpack_rpc/channel.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
 #include "nvim/os/input.h"
@@ -64,7 +64,7 @@ static handle_T cursor_grid_handle = DEFAULT_GRID_HANDLE;
 static bool has_mouse = false;
 static int pending_has_mouse = -1;
 
-#if MIN_LOG_LEVEL > DEBUG_LOG_LEVEL
+#if MIN_LOG_LEVEL > LOGLVL_DBG
 # define UI_LOG(funname)
 #else
 static size_t uilog_seen = 0;
@@ -82,10 +82,10 @@ static char uilog_last_event[1024] = { 0 };
       uilog_seen++; \
     } else { \
       if (uilog_seen > 0) { \
-        logmsg(DEBUG_LOG_LEVEL, "UI: ", NULL, -1, true, \
+        logmsg(LOGLVL_DBG, "UI: ", NULL, -1, true, \
                "%s (+%zu times...)", uilog_last_event, uilog_seen); \
       } \
-      logmsg(DEBUG_LOG_LEVEL, "UI: ", NULL, -1, true, STR(funname)); \
+      logmsg(LOGLVL_DBG, "UI: ", NULL, -1, true, STR(funname)); \
       uilog_seen = 0; \
       xstrlcpy(uilog_last_event, STR(funname), sizeof(uilog_last_event)); \
     } \
@@ -181,7 +181,6 @@ void ui_event(char *name, Array args)
     api_free_array(args);
   }
 }
-
 
 void ui_refresh(void)
 {
@@ -344,7 +343,7 @@ void vim_beep(unsigned val)
     // When 'debug' contains "beep" produce a message.  If we are sourcing
     // a script or executing a function give the user a hint where the beep
     // comes from.
-    if (vim_strchr(p_debug, 'e') != NULL) {
+    if (vim_strchr((char *)p_debug, 'e') != NULL) {
       msg_source(HL_ATTR(HLF_W));
       msg_attr(_("Beep!"), HL_ATTR(HLF_W));
     }
@@ -436,7 +435,7 @@ void ui_set_ext_option(UI *ui, UIExtension ext, bool active)
 void ui_line(ScreenGrid *grid, int row, int startcol, int endcol, int clearcol, int clearattr,
              bool wrap)
 {
-  assert(0 <= row && row < grid->Rows);
+  assert(0 <= row && row < grid->rows);
   LineFlags flags = wrap ? kLineFlagWrap : 0;
   if (startcol == -1) {
     startcol = 0;
@@ -453,7 +452,7 @@ void ui_line(ScreenGrid *grid, int row, int startcol, int endcol, int clearcol, 
   if (p_wd && !(rdb_flags & RDB_COMPOSITOR)) {
     // If 'writedelay' is active, set the cursor to indicate what was drawn.
     ui_call_grid_cursor_goto(grid->handle, row,
-                             MIN(clearcol, (int)grid->Columns-1));
+                             MIN(clearcol, (int)grid->cols - 1));
     ui_call_flush();
     uint64_t wd = (uint64_t)labs(p_wd);
     os_microdelay(wd * 1000u, true);
@@ -533,7 +532,6 @@ void ui_flush(void)
   ui_call_flush();
 }
 
-
 /// Check if 'mouse' is active for the current mode
 ///
 /// TODO(bfredl): precompute the State -> active mapping when 'mouse' changes,
@@ -549,13 +547,13 @@ void ui_check_mouse(void)
   int checkfor = MOUSE_NORMAL;  // assume normal mode
   if (VIsual_active) {
     checkfor = MOUSE_VISUAL;
-  } else if (State == HITRETURN || State == ASKMORE || State == SETWSIZE) {
+  } else if (State == MODE_HITRETURN || State == MODE_ASKMORE || State == MODE_SETWSIZE) {
     checkfor = MOUSE_RETURN;
-  } else if (State & INSERT) {
+  } else if (State & MODE_INSERT) {
     checkfor = MOUSE_INSERT;
-  } else if (State & CMDLINE) {
+  } else if (State & MODE_CMDLINE) {
     checkfor = MOUSE_COMMAND;
-  } else if (State == CONFIRM || State == EXTERNCMD) {
+  } else if (State == MODE_CONFIRM || State == MODE_EXTERNCMD) {
     checkfor = ' ';  // don't use mouse for ":confirm" or ":!cmd"
   }
 
@@ -567,7 +565,7 @@ void ui_check_mouse(void)
   for (char_u *p = p_mouse; *p; p++) {
     switch (*p) {
     case 'a':
-      if (vim_strchr((char_u *)MOUSE_A, checkfor) != NULL) {
+      if (vim_strchr(MOUSE_A, checkfor) != NULL) {
         has_mouse = true;
         return;
       }

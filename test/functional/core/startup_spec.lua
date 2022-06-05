@@ -53,7 +53,6 @@ describe('startup', function()
     ]])
   end)
   it('in a TTY: has("ttyin")==1 has("ttyout")==1', function()
-    if helpers.pending_win32(pending) then return end
     local screen = Screen.new(25, 4)
     screen:attach()
     if iswin() then
@@ -105,7 +104,6 @@ describe('startup', function()
     end)
   end)
   it('input from pipe (implicit) #7679', function()
-    if helpers.pending_win32(pending) then return end
     local screen = Screen.new(25, 4)
     screen:attach()
     if iswin() then
@@ -257,11 +255,11 @@ describe('startup', function()
 
   it('does not crash when expanding cdpath during early_init', function()
     clear{env={CDPATH='~doesnotexist'}}
+    assert_alive()
     eq(',~doesnotexist', eval('&cdpath'))
   end)
 
   it('ENTER dismisses early message #7967', function()
-    if helpers.pending_win32(pending) then return end
     local screen
     screen = Screen.new(60, 6)
     screen:attach()
@@ -494,14 +492,14 @@ describe('sysinit', function()
   end)
 
   it('fixed hang issue with -D (#12647)', function()
-    if helpers.pending_win32(pending) then return end
     local screen
-    screen = Screen.new(60, 6)
+    screen = Screen.new(60, 7)
     screen:attach()
     command([[let g:id = termopen('"]]..nvim_prog..
     [[" -u NONE -i NONE --cmd "set noruler" -D')]])
     screen:expect([[
       ^                                                            |
+                                                                  |
       Entering Debug mode.  Type "cont" to continue.              |
       cmd: augroup nvim_terminal                                  |
       >                                                           |
@@ -511,6 +509,7 @@ describe('sysinit', function()
     command([[call chansend(g:id, "cont\n")]])
     screen:expect([[
       ^                                                            |
+      ~                                                           |
       ~                                                           |
       [No Name]                                                   |
                                                                   |

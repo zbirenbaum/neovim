@@ -140,12 +140,11 @@ typedef struct {
 
 // Useful macro for executing some `code` for each item in an array.
 #define FOREACH_ITEM(a, __foreach_item, code) \
-  for (size_t (__foreach_item ## _index) = 0; (__foreach_item ## _index) < (a).size; \
-       (__foreach_item ## _index)++) { \
-    Object __foreach_item = (a).items[__foreach_item ## _index]; \
+  for (size_t (__foreach_item##_index) = 0; (__foreach_item##_index) < (a).size; \
+       (__foreach_item##_index)++) { \
+    Object __foreach_item = (a).items[__foreach_item##_index]; \
     code; \
   }
-
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/private/helpers.h.generated.h"
@@ -162,6 +161,5 @@ typedef struct {
     code; \
     current_sctx = save_current_sctx; \
   } while (0);
-
 
 #endif  // NVIM_API_PRIVATE_HELPERS_H

@@ -565,7 +565,7 @@ void tv_list_append_allocated_string(list_T *const l, char *const str)
   tv_list_append_owned_tv(l, (typval_T) {
     .v_type = VAR_STRING,
     .v_lock = VAR_UNLOCKED,
-    .vval.v_string = (char_u *)str,
+    .vval.v_string = str,
   });
 }
 
@@ -879,9 +879,9 @@ void tv_list_reverse(list_T *const l)
   list_log(l, NULL, NULL, "reverse");
 #define SWAP(a, b) \
   do { \
-    tmp = a; \
-    a = b; \
-    b = tmp; \
+    tmp = (a); \
+    (a) = (b); \
+    (b) = tmp; \
   } while (0)
   listitem_T *tmp;
 
@@ -1139,7 +1139,7 @@ void callback_free(Callback *callback)
 {
   switch (callback->type) {
   case kCallbackFuncref:
-    func_unref(callback->data.funcref);
+    func_unref((char_u *)callback->data.funcref);
     xfree(callback->data.funcref);
     break;
   case kCallbackPartial:
@@ -1167,8 +1167,8 @@ void callback_put(Callback *cb, typval_T *tv)
     break;
   case kCallbackFuncref:
     tv->v_type = VAR_FUNC;
-    tv->vval.v_string = vim_strsave(cb->data.funcref);
-    func_ref(cb->data.funcref);
+    tv->vval.v_string = xstrdup(cb->data.funcref);
+    func_ref((char_u *)cb->data.funcref);
     break;
   case kCallbackLua:
   // TODO(tjdevries): Unified Callback.
@@ -1193,8 +1193,8 @@ void callback_copy(Callback *dest, Callback *src)
     dest->data.partial->pt_refcount++;
     break;
   case kCallbackFuncref:
-    dest->data.funcref = vim_strsave(src->data.funcref);
-    func_ref(src->data.funcref);
+    dest->data.funcref = xstrdup(src->data.funcref);
+    func_ref((char_u *)src->data.funcref);
     break;
   case kCallbackLua:
     dest->data.luaref = api_new_luaref(src->data.luaref);
@@ -1288,7 +1288,7 @@ void tv_dict_watcher_notify(dict_T *const dict, const char *const key, typval_T 
   argv[0].vval.v_dict = dict;
   argv[1].v_type = VAR_STRING;
   argv[1].v_lock = VAR_UNLOCKED;
-  argv[1].vval.v_string = (char_u *)xstrdup(key);
+  argv[1].vval.v_string = xstrdup(key);
   argv[2].v_type = VAR_DICT;
   argv[2].v_lock = VAR_UNLOCKED;
   argv[2].vval.v_dict = tv_dict_alloc();
@@ -1515,7 +1515,6 @@ void tv_dict_free(dict_T *const d)
   }
 }
 
-
 /// Unreference a dictionary
 ///
 /// Decrements the reference count and frees dictionary when it becomes zero.
@@ -1588,8 +1587,6 @@ varnumber_T tv_dict_get_number(const dict_T *const d, const char *const key)
 }
 
 /// Converts a dict to an environment
-///
-///
 char **tv_dict_to_env(dict_T *denv)
 {
   size_t env_size = (size_t)tv_dict_len(denv);
@@ -1908,7 +1905,7 @@ int tv_dict_add_allocated_str(dict_T *const d, const char *const key, const size
   dictitem_T *const item = tv_dict_item_alloc_len(key, key_len);
 
   item->di_tv.v_type = VAR_STRING;
-  item->di_tv.vval.v_string = (char_u *)val;
+  item->di_tv.vval.v_string = val;
   if (tv_dict_add(d, item) == FAIL) {
     tv_dict_item_free(item);
     return FAIL;
@@ -2265,36 +2262,36 @@ void tv_blob_copy(typval_T *const from, typval_T *const to)
 
 #define TYPVAL_ENCODE_CONV_NIL(tv) \
   do { \
-    tv->vval.v_special = kSpecialVarNull; \
-    tv->v_lock = VAR_UNLOCKED; \
+    (tv)->vval.v_special = kSpecialVarNull; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 #define TYPVAL_ENCODE_CONV_BOOL(tv, num) \
   do { \
-    tv->vval.v_bool = kBoolVarFalse; \
-    tv->v_lock = VAR_UNLOCKED; \
+    (tv)->vval.v_bool = kBoolVarFalse; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 #define TYPVAL_ENCODE_CONV_NUMBER(tv, num) \
   do { \
-    (void)num; \
-    tv->vval.v_number = 0; \
-    tv->v_lock = VAR_UNLOCKED; \
+    (void)(num); \
+    (tv)->vval.v_number = 0; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 #define TYPVAL_ENCODE_CONV_UNSIGNED_NUMBER(tv, num)
 
 #define TYPVAL_ENCODE_CONV_FLOAT(tv, flt) \
   do { \
-    tv->vval.v_float = 0; \
-    tv->v_lock = VAR_UNLOCKED; \
+    (tv)->vval.v_float = 0; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 #define TYPVAL_ENCODE_CONV_STRING(tv, buf, len) \
   do { \
     xfree(buf); \
-    tv->vval.v_string = NULL; \
-    tv->v_lock = VAR_UNLOCKED; \
+    (tv)->vval.v_string = NULL; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 #define TYPVAL_ENCODE_CONV_STR_STRING(tv, buf, len)
@@ -2303,9 +2300,9 @@ void tv_blob_copy(typval_T *const from, typval_T *const to)
 
 #define TYPVAL_ENCODE_CONV_BLOB(tv, blob, len) \
   do { \
-    tv_blob_unref(tv->vval.v_blob); \
-    tv->vval.v_blob = NULL; \
-    tv->v_lock = VAR_UNLOCKED; \
+    tv_blob_unref((tv)->vval.v_blob); \
+    (tv)->vval.v_blob = NULL; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 static inline int _nothing_conv_func_start(typval_T *const tv, char_u *const fun)
@@ -2362,9 +2359,9 @@ static inline void _nothing_conv_func_end(typval_T *const tv, const int copyID)
 
 #define TYPVAL_ENCODE_CONV_EMPTY_LIST(tv) \
   do { \
-    tv_list_unref(tv->vval.v_list); \
-    tv->vval.v_list = NULL; \
-    tv->v_lock = VAR_UNLOCKED; \
+    tv_list_unref((tv)->vval.v_list); \
+    (tv)->vval.v_list = NULL; \
+    (tv)->v_lock = VAR_UNLOCKED; \
   } while (0)
 
 static inline void _nothing_conv_empty_dict(typval_T *const tv, dict_T **const dictp)
@@ -2378,8 +2375,8 @@ static inline void _nothing_conv_empty_dict(typval_T *const tv, dict_T **const d
 }
 #define TYPVAL_ENCODE_CONV_EMPTY_DICT(tv, dict) \
   do { \
-    assert((void *)&dict != (void *)&TYPVAL_ENCODE_NODICT_VAR); \
-    _nothing_conv_empty_dict(tv, ((dict_T **)&dict)); \
+    assert((void *)&(dict) != (void *)&TYPVAL_ENCODE_NODICT_VAR); \
+    _nothing_conv_empty_dict(tv, ((dict_T **)&(dict))); \
   } while (0)
 
 static inline int _nothing_conv_real_list_after_start(typval_T *const tv,
@@ -2400,7 +2397,7 @@ static inline int _nothing_conv_real_list_after_start(typval_T *const tv,
 
 #define TYPVAL_ENCODE_CONV_REAL_LIST_AFTER_START(tv, mpsv) \
   do { \
-    if (_nothing_conv_real_list_after_start(tv, &mpsv) != NOTDONE) { \
+    if (_nothing_conv_real_list_after_start(tv, &(mpsv)) != NOTDONE) { \
       goto typval_encode_stop_converting_one_item; \
     } \
   } while (0)
@@ -2440,8 +2437,9 @@ static inline int _nothing_conv_real_dict_after_start(typval_T *const tv, dict_T
 
 #define TYPVAL_ENCODE_CONV_REAL_DICT_AFTER_START(tv, dict, mpsv) \
   do { \
-    if (_nothing_conv_real_dict_after_start(tv, (dict_T **)&dict, (void *)&TYPVAL_ENCODE_NODICT_VAR, \
-                                            &mpsv) != NOTDONE) { \
+    if (_nothing_conv_real_dict_after_start(tv, (dict_T **)&(dict), \
+                                            (void *)&TYPVAL_ENCODE_NODICT_VAR, &(mpsv)) \
+        != NOTDONE) { \
       goto typval_encode_stop_converting_one_item; \
     } \
   } while (0)
@@ -2460,7 +2458,7 @@ static inline void _nothing_conv_dict_end(typval_T *const tv, dict_T **const dic
   }
 }
 #define TYPVAL_ENCODE_CONV_DICT_END(tv, dict) \
-  _nothing_conv_dict_end(tv, (dict_T **)&dict, \
+  _nothing_conv_dict_end(tv, (dict_T **)&(dict), \
                          (void *)&TYPVAL_ENCODE_NODICT_VAR)
 
 #define TYPVAL_ENCODE_CONV_RECURSE(val, conv_type)
@@ -2534,7 +2532,7 @@ void tv_free(typval_T *tv)
       partial_unref(tv->vval.v_partial);
       break;
     case VAR_FUNC:
-      func_unref(tv->vval.v_string);
+      func_unref((char_u *)tv->vval.v_string);
       FALLTHROUGH;
     case VAR_STRING:
       xfree(tv->vval.v_string);
@@ -2585,9 +2583,9 @@ void tv_copy(const typval_T *const from, typval_T *const to)
   case VAR_STRING:
   case VAR_FUNC:
     if (from->vval.v_string != NULL) {
-      to->vval.v_string = vim_strsave(from->vval.v_string);
+      to->vval.v_string = xstrdup(from->vval.v_string);
       if (from->v_type == VAR_FUNC) {
-        func_ref(to->vval.v_string);
+        func_ref((char_u *)to->vval.v_string);
       }
     }
     break;
@@ -2642,9 +2640,9 @@ void tv_item_lock(typval_T *const tv, const int deep, const bool lock, const boo
   // lock/unlock the item itself
 #define CHANGE_LOCK(lock, var) \
   do { \
-    var = ((VarLockStatus[]) { \
-      [VAR_UNLOCKED] = (lock ? VAR_LOCKED : VAR_UNLOCKED), \
-      [VAR_LOCKED] = (lock ? VAR_LOCKED : VAR_UNLOCKED), \
+    (var) = ((VarLockStatus[]) { \
+      [VAR_UNLOCKED] = ((lock) ? VAR_LOCKED : VAR_UNLOCKED), \
+      [VAR_LOCKED] = ((lock) ? VAR_LOCKED : VAR_UNLOCKED), \
       [VAR_FIXED] = VAR_FIXED, \
     })[var]; \
   } while (0)
@@ -3073,7 +3071,7 @@ varnumber_T tv_get_number_chk(const typval_T *const tv, bool *const ret_error)
   case VAR_STRING: {
     varnumber_T n = 0;
     if (tv->vval.v_string != NULL) {
-      vim_str2nr(tv->vval.v_string, NULL, NULL, STR2NR_ALL, &n, NULL, 0,
+      vim_str2nr((char_u *)tv->vval.v_string, NULL, NULL, STR2NR_ALL, &n, NULL, 0,
                  false);
     }
     return n;

@@ -78,7 +78,6 @@ void nvim_buf_clear_highlight(Buffer buffer, Integer ns_id, Integer line_start, 
   nvim_buf_clear_namespace(buffer, ns_id, line_start, line_end, err);
 }
 
-
 /// Set the virtual text (annotation) for a buffer line.
 ///
 /// @deprecated use nvim_buf_set_extmark to use full virtual text
@@ -137,7 +136,6 @@ Integer nvim_buf_set_virtual_text(Buffer buffer, Integer src_id, Integer line, A
     return 0;
   }
 
-
   Decoration *existing = decor_find_virttext(buf, (int)line, ns_id);
 
   if (existing) {
@@ -192,7 +190,7 @@ String buffer_get_line(Buffer buffer, Integer index, Error *err)
   String rv = { .size = 0 };
 
   index = convert_index(index);
-  Array slice = nvim_buf_get_lines(0, buffer, index, index+1, true, err);
+  Array slice = nvim_buf_get_lines(0, buffer, index, index + 1, true, err);
 
   if (!ERROR_SET(err) && slice.size) {
     rv = slice.items[0].data.string;
@@ -221,7 +219,7 @@ void buffer_set_line(Buffer buffer, Integer index, String line, Error *err)
   Object l = STRING_OBJ(line);
   Array array = { .items = &l, .size = 1 };
   index = convert_index(index);
-  nvim_buf_set_lines(0, buffer, index, index+1, true,  array, err);
+  nvim_buf_set_lines(0, buffer, index, index + 1, true,  array, err);
 }
 
 /// Deletes a buffer line
@@ -239,7 +237,7 @@ void buffer_del_line(Buffer buffer, Integer index, Error *err)
 {
   Array array = ARRAY_DICT_INIT;
   index = convert_index(index);
-  nvim_buf_set_lines(0, buffer, index, index+1, true, array, err);
+  nvim_buf_set_lines(0, buffer, index, index + 1, true, array, err);
 }
 
 /// Retrieves a line range from the buffer
@@ -291,7 +289,6 @@ void buffer_set_line_slice(Buffer buffer, Integer start, Integer end, Boolean in
   end = convert_index(end) + include_end;
   nvim_buf_set_lines(0, buffer, start, end, false, replacement, err);
 }
-
 
 /// Sets a buffer-scoped (b:) variable
 ///

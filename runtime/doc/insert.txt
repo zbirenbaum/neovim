@@ -32,9 +32,6 @@ If you are working in a special language mode when inserting text, see the
 'langmap' option, |'langmap'|, on how to avoid switching this mode on and off
 all the time.
 
-If you have 'insertmode' set, <Esc> and a few other keys get another meaning.
-See |'insertmode'|.
-
 char		action	~
 -----------------------------------------------------------------------
 						*i_CTRL-[* *i_<Esc>*
@@ -192,12 +189,14 @@ CTRL-D		Delete one shiftwidth of indent at the start of the current
 		label.
 
 						*i_CTRL-V*
-CTRL-V		Insert next non-digit literally.  For special keys, the
-		terminal code is inserted.  It's also possible to enter the
-		decimal, octal or hexadecimal value of a character
+CTRL-V		Insert next non-digit literally.  It's also possible to enter
+		the decimal, octal or hexadecimal value of a character
 		|i_CTRL-V_digit|.
 		The characters typed right after CTRL-V are not considered for
 		mapping.
+		For special keys, the CTRL modifier may be included into the
+		key to produce a control character.  If there is no control
+		character for the key then its |key-notation| is inserted.
 		Note: When CTRL-V is mapped (e.g., to paste text) you can
 		often use CTRL-Q instead |i_CTRL-Q|.
 
@@ -205,6 +204,10 @@ CTRL-V		Insert next non-digit literally.  For special keys, the
 CTRL-Q		Same as CTRL-V.
 		Note: Some terminal connections may eat CTRL-Q, it doesn't
 		work then.  It does work in the GUI.
+
+CTRL-SHIFT-V				*i_CTRL-SHIFT-V* *i_CTRL-SHIFT-Q*
+CTRL-SHIFT-Q	Works just like CTRL-V, but do not try to include the CTRL
+		modifier into the key.
 
 CTRL-X		Enter CTRL-X mode.  This is a sub-mode where commands can
 		be given to complete words or scroll the window.  See
@@ -329,9 +332,8 @@ that key is interpreted as in Insert mode.
 The following keys are special.  They stop the current insert, do something,
 and then restart insertion.  This means you can do something without getting
 out of Insert mode.  This is very handy if you prefer to use the Insert mode
-all the time, just like editors that don't have a separate Normal mode.  You
-may also want to set the 'insertmode' option.  You can use CTRL-O if you want
-to map a function key to a command.
+all the time, just like editors that don't have a separate Normal mode. You
+can use CTRL-O if you want to map a function key to a command.
 
 The changes (inserted or deleted characters) before and after these keys can
 be undone separately.  Only the last change can be redone and always behaves
@@ -372,7 +374,6 @@ CTRL-G CTRL-J	cursor one line down, insert start column    *i_CTRL-G_CTRL-J*
 <S-ScrollWheelRight> move window one page right		*i_<S-ScrollWheelRight>*
 CTRL-O		execute one command, return to Insert mode   *i_CTRL-O*
 CTRL-\ CTRL-O	like CTRL-O but don't move the cursor	     *i_CTRL-\_CTRL-O*
-CTRL-L		when 'insertmode' is set: go to Normal mode  *i_CTRL-L*
 CTRL-G u	break undo sequence, start new change	     *i_CTRL-G_u*
 CTRL-G U	don't break undo with next left/right cursor *i_CTRL-G_U*
 		movement, if the cursor stays within the

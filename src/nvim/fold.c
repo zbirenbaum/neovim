@@ -660,7 +660,6 @@ void foldCreate(win_T *wp, pos_T start, pos_T end)
   }
 }
 
-
 // deleteFold() {{{2
 /// @param start delete all folds from start to end when not 0
 /// @param end delete all folds from start to end when not 0
@@ -755,8 +754,7 @@ void deleteFold(win_T *const wp, const linenr_T start, const linenr_T end, const
     // the modification of the *first* line of the fold, but we send through a
     // notification that includes every line that was part of the fold
     int64_t num_changed = last_lnum - first_lnum;
-    buf_updates_send_changes(wp->w_buffer, first_lnum, num_changed,
-                             num_changed, true);
+    buf_updates_send_changes(wp->w_buffer, first_lnum, num_changed, num_changed);
   }
 }
 
@@ -775,7 +773,7 @@ void clearFolding(win_T *win)
 /// The changes in lines from top to bot (inclusive).
 void foldUpdate(win_T *wp, linenr_T top, linenr_T bot)
 {
-  if (compl_busy || State & INSERT) {
+  if (disable_fold_update || compl_busy || State & MODE_INSERT) {
     return;
   }
 
@@ -785,11 +783,18 @@ void foldUpdate(win_T *wp, linenr_T top, linenr_T bot)
   }
 
   if (wp->w_folds.ga_len > 0) {
-    // Mark all folds from top to bot as maybe-small.
+    linenr_T maybe_small_start = top;
+    linenr_T maybe_small_end = bot;
+
+    // Mark all folds from top to bot (or bot to top) as maybe-small.
+    if (top > bot) {
+      maybe_small_start = bot;
+      maybe_small_end = top;
+    }
     fold_T *fp;
-    (void)foldFind(&wp->w_folds, top, &fp);
+    (void)foldFind(&wp->w_folds, maybe_small_start, &fp);
     while (fp < (fold_T *)wp->w_folds.ga_data + wp->w_folds.ga_len
-           && fp->fd_top < bot) {
+           && fp->fd_top <= maybe_small_end) {
       fp->fd_small = kNone;
       fp++;
     }
@@ -1058,7 +1063,7 @@ void cloneFoldGrowArray(garray_T *from, garray_T *to)
 
 // foldFind() {{{2
 /// Search for line "lnum" in folds of growarray "gap".
-/// Set *fpp to the fold struct for the fold that contains "lnum" or
+/// Set "*fpp" to the fold struct for the fold that contains "lnum" or
 /// the first fold below it (careful: it can be beyond the end of the array!).
 ///
 /// @return  false when there is no fold that contains "lnum".
@@ -1374,7 +1379,7 @@ void foldMarkAdjust(win_T *wp, linenr_T line1, linenr_T line2, long amount, long
   }
   // If appending a line in Insert mode, it should be included in the fold
   // just above the line.
-  if ((State & INSERT) && amount == (linenr_T)1 && line2 == MAXLNUM) {
+  if ((State & MODE_INSERT) && amount == (linenr_T)1 && line2 == MAXLNUM) {
     line1--;
   }
   foldMarkAdjustRecurse(wp, &wp->w_folds, line1, line2, amount, amount_after);
@@ -1394,7 +1399,7 @@ static void foldMarkAdjustRecurse(win_T *wp, garray_T *gap, linenr_T line1, line
 
   // In Insert mode an inserted line at the top of a fold is considered part
   // of the fold, otherwise it isn't.
-  if ((State & INSERT) && amount == (linenr_T)1 && line2 == MAXLNUM) {
+  if ((State & MODE_INSERT) && amount == (linenr_T)1 && line2 == MAXLNUM) {
     top = line1 + 1;
   } else {
     top = line1;
@@ -1608,7 +1613,7 @@ static void foldCreateMarkers(win_T *wp, pos_T start, pos_T end)
   // u_save() is unable to save the buffer line, but we send the
   // nvim_buf_lines_event anyway since it won't do any harm.
   int64_t num_changed = 1 + end.lnum - start.lnum;
-  buf_updates_send_changes(buf, start.lnum, num_changed, num_changed, true);
+  buf_updates_send_changes(buf, start.lnum, num_changed, num_changed);
 }
 
 // foldAddMarker() {{{2
@@ -1640,11 +1645,11 @@ static void foldAddMarker(buf_T *buf, pos_T pos, const char_u *marker, size_t ma
       STRCPY(newline + line_len, cms);
       memcpy(newline + line_len + (p - cms), marker, markerlen);
       STRCPY(newline + line_len + (p - cms) + markerlen, p + 2);
-      added = markerlen + STRLEN(cms)-2;
+      added = markerlen + STRLEN(cms) - 2;
     }
     ml_replace_buf(buf, lnum, newline, false);
     if (added) {
-      extmark_splice_cols(buf, (int)lnum-1, (int)line_len,
+      extmark_splice_cols(buf, (int)lnum - 1, (int)line_len,
                           0, (int)added, kExtmarkUndo);
     }
   }
@@ -1662,7 +1667,7 @@ static void deleteFoldMarkers(win_T *wp, fold_T *fp, int recursive, linenr_T lnu
                         lnum_off + fp->fd_top);
     }
   }
-  foldDelMarker(wp->w_buffer, fp->fd_top+lnum_off, wp->w_p_fmr,
+  foldDelMarker(wp->w_buffer, fp->fd_top + lnum_off, wp->w_p_fmr,
                 foldstartmarkerlen);
   foldDelMarker(wp->w_buffer, fp->fd_top + lnum_off + fp->fd_len - 1,
                 foldendmarker, foldendmarkerlen);
@@ -1710,7 +1715,7 @@ static void foldDelMarker(buf_T *buf, linenr_T lnum, char_u *marker, size_t mark
       memcpy(newline, line, (size_t)(p - line));
       STRCPY(newline + (p - line), p + len);
       ml_replace_buf(buf, lnum, newline, false);
-      extmark_splice_cols(buf, (int)lnum-1, (int)(p - line),
+      extmark_splice_cols(buf, (int)lnum - 1, (int)(p - line),
                           (int)len, 0, kExtmarkUndo);
     }
     break;
@@ -1774,7 +1779,9 @@ char_u *get_foldtext(win_T *wp, linenr_T lnum, linenr_T lnume, foldinfo_T foldin
       curbuf = wp->w_buffer;
 
       emsg_silent++;       // handle exceptions, but don't display errors
-      text = eval_to_string_safe(wp->w_p_fdt, NULL, was_set_insecurely(wp, "foldtext", OPT_LOCAL));
+      text =
+        (char_u *)eval_to_string_safe((char *)wp->w_p_fdt, NULL,
+                                      was_set_insecurely(wp, "foldtext", OPT_LOCAL));
       emsg_silent--;
 
       if (text == NULL || did_emsg) {
@@ -1796,10 +1803,10 @@ char_u *get_foldtext(win_T *wp, linenr_T lnum, linenr_T lnume, foldinfo_T foldin
       // Replace unprintable characters, if there are any.  But
       // replace a TAB with a space.
       for (p = text; *p != NUL; p++) {
-        int len = utfc_ptr2len(p);
+        int len = utfc_ptr2len((char *)p);
 
         if (len > 1) {
-          if (!vim_isprintc(utf_ptr2char(p))) {
+          if (!vim_isprintc(utf_ptr2char((char *)p))) {
             break;
           }
           p += len - 1;
@@ -1838,7 +1845,7 @@ void foldtext_cleanup(char_u *str)
   bool did2 = false;
 
   // Ignore leading and trailing white space in 'commentstring'.
-  char_u *cms_start = skipwhite(curbuf->b_p_cms);
+  char_u *cms_start = (char_u *)skipwhite((char *)curbuf->b_p_cms);
   size_t cms_slen = STRLEN(cms_start);
   while (cms_slen > 0 && ascii_iswhite(cms_start[cms_slen - 1])) {
     --cms_slen;
@@ -1857,7 +1864,7 @@ void foldtext_cleanup(char_u *str)
     }
 
     // skip "%s" and white space after it
-    s = skipwhite(cms_end + 2);
+    s = (char_u *)skipwhite((char *)cms_end + 2);
     cms_elen -= (size_t)(s - cms_end);
     cms_end = s;
   }
@@ -1877,8 +1884,7 @@ void foldtext_cleanup(char_u *str)
 
       // May remove 'commentstring' start.  Useful when it's a double
       // quote and we already removed a double quote.
-      for (p = s; p > str && ascii_iswhite(p[-1]); p--) {
-      }
+      for (p = s; p > str && ascii_iswhite(p[-1]); p--) {}
       if (p >= str + cms_slen
           && STRNCMP(p - cms_slen, cms_start, cms_slen) == 0) {
         len += (size_t)(s - p) + cms_slen;
@@ -1928,7 +1934,7 @@ static void foldUpdateIEMS(win_T *const wp, linenr_T top, linenr_T bot)
     bot = wp->w_buffer->b_ml.ml_line_count;
     wp->w_foldinvalid = false;
 
-    // Mark all folds a maybe-small.
+    // Mark all folds as maybe-small.
     setSmallMaybe(&wp->w_folds);
   }
 
@@ -1995,7 +2001,7 @@ static void foldUpdateIEMS(win_T *const wp, linenr_T top, linenr_T bot)
       // start one line back, because a "<1" may indicate the end of a
       // fold in the topline
       if (top > 1) {
-        --fline.lnum;
+        fline.lnum--;
       }
     } else if (foldmethodIsSyntax(wp)) {
       getlevel = foldlevelSyntax;
@@ -2003,6 +2009,12 @@ static void foldUpdateIEMS(win_T *const wp, linenr_T top, linenr_T bot)
       getlevel = foldlevelDiff;
     } else {
       getlevel = foldlevelIndent;
+      // Start one line back, because if the line above "top" has an
+      // undefined fold level, folding it relies on the line under it,
+      // which is "top".
+      if (top > 1) {
+        fline.lnum--;
+      }
     }
 
     // Backup to a line for which the fold level is defined.  Since it's
@@ -2309,6 +2321,7 @@ static linenr_T foldUpdateIEMSRecurse(garray_T *const gap, const int level,
               }
               fp->fd_len += fp->fd_top - firstlnum;
               fp->fd_top = firstlnum;
+              fp->fd_small = kNone;
               fold_changed = true;
             } else if ((flp->start != 0 && lvl == level)
                        || (firstlnum != startlnum)) {
@@ -2547,7 +2560,7 @@ static linenr_T foldUpdateIEMSRecurse(garray_T *const gap, const int level,
         // Make fold that includes lnum start at lnum.
         foldMarkAdjustRecurse(flp->wp, &fp2->fd_nested,
                               (linenr_T)0, (flp->lnum - fp2->fd_top - 1),
-                              (linenr_T)MAXLNUM, (fp2->fd_top-flp->lnum));
+                              (linenr_T)MAXLNUM, (fp2->fd_top - flp->lnum));
         fp2->fd_len -= flp->lnum - fp2->fd_top;
         fp2->fd_top = flp->lnum;
         fold_changed = true;
@@ -2615,7 +2628,8 @@ static void foldSplit(buf_T *buf, garray_T *const gap, const int i, const linenr
   // any between top and bot, they have been removed by the caller.
   garray_T *const gap1 = &fp->fd_nested;
   garray_T *const gap2 = &fp[1].fd_nested;
-  if (foldFind(gap1, bot + 1 - fp->fd_top, &fp2)) {
+  (void)foldFind(gap1, bot + 1 - fp->fd_top, &fp2);
+  if (fp2 != NULL) {
     const int len = (int)((fold_T *)gap1->ga_data + gap1->ga_len - fp2);
     if (len > 0) {
       ga_grow(gap2, len);
@@ -2751,6 +2765,7 @@ static void truncate_fold(win_T *const wp, fold_T *fp, linenr_T end)
 }
 
 #define FOLD_END(fp) ((fp)->fd_top + (fp)->fd_len - 1)
+// -V:VALID_FOLD:V560
 #define VALID_FOLD(fp, gap) \
   ((gap)->ga_len > 0 && (fp) < ((fold_T *)(gap)->ga_data + (gap)->ga_len))
 #define FOLD_INDEX(fp, gap) ((size_t)((fp) - ((fold_T *)(gap)->ga_data)))
@@ -2904,11 +2919,11 @@ static void foldlevelIndent(fline_T *flp)
   linenr_T lnum = flp->lnum + flp->off;
 
   buf = flp->wp->w_buffer;
-  s = skipwhite(ml_get_buf(buf, lnum, false));
+  s = (char_u *)skipwhite((char *)ml_get_buf(buf, lnum, false));
 
   // empty line or lines starting with a character in 'foldignore': level
   // depends on surrounding lines
-  if (*s == NUL || vim_strchr(flp->wp->w_p_fdi, *s) != NULL) {
+  if (*s == NUL || vim_strchr((char *)flp->wp->w_p_fdi, *s) != NULL) {
     // first and last line can't be undefined, use level 0
     if (lnum == 1 || lnum == buf->b_ml.ml_line_count) {
       flp->lvl = 0;
@@ -2961,7 +2976,7 @@ static void foldlevelExpr(fline_T *flp)
   // KeyTyped may be reset to 0 when calling a function which invokes
   // do_cmdline().  To make 'foldopen' work correctly restore KeyTyped.
   const bool save_keytyped = KeyTyped;
-  const int n = eval_foldexpr(flp->wp->w_p_fde, &c);
+  const int n = eval_foldexpr((char *)flp->wp->w_p_fde, &c);
   KeyTyped = save_keytyped;
 
   switch (c) {
@@ -3039,7 +3054,7 @@ static void foldlevelExpr(fline_T *flp)
 /// Relies on the option value to have been checked for correctness already.
 static void parseMarker(win_T *wp)
 {
-  foldendmarker = vim_strchr(wp->w_p_fmr, ',');
+  foldendmarker = (char_u *)vim_strchr((char *)wp->w_p_fmr, ',');
   foldstartmarkerlen = (size_t)(foldendmarker++ - wp->w_p_fmr);
   foldendmarkerlen = STRLEN(foldendmarker);
 }

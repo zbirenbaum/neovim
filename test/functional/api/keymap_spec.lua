@@ -321,7 +321,7 @@ describe('nvim_get_keymap', function()
     eq({space_table}, meths.get_keymap('n'))
   end)
 
-  it('can handle lua keymaps', function()
+  it('can handle lua mappings', function()
     eq(0, exec_lua [[
       GlobalCount = 0
       vim.api.nvim_set_keymap ('n', 'asdf', '', {callback = function() GlobalCount = GlobalCount + 1 end })
@@ -582,7 +582,7 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
   it('can set mappings containing literal keycodes', function()
     meths.set_keymap('n', '\n\r\n', 'rhs', {})
     local expected = generate_mapargs('n', '<NL><CR><NL>', 'rhs')
-    eq(expected, get_mapargs('n', '<C-j><CR><C-j>'))
+    eq(expected, get_mapargs('n', '<NL><CR><NL>'))
   end)
 
   it('can set mappings whose RHS is a <Nop>', function()
@@ -605,6 +605,13 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
     command('normal ilhs')
     eq({''}, curbufmeths.get_lines(0, -1, 0))
     eq(generate_mapargs('i', 'lhs', '<NOP>', {}),
+       get_mapargs('i', 'lhs'))
+
+    -- a single ^V in RHS is also <Nop> (see :h map-empty-rhs)
+    meths.set_keymap('i', 'lhs', '\022', {})
+    command('normal ilhs')
+    eq({''}, curbufmeths.get_lines(0, -1, 0))
+    eq(generate_mapargs('i', 'lhs', '\022', {}),
        get_mapargs('i', 'lhs'))
   end)
 
@@ -785,7 +792,7 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
 
   end)
 
-  it (':map command shows lua keymap correctly', function()
+  it (':map command shows lua mapping correctly', function()
     exec_lua [[
       vim.api.nvim_set_keymap ('n', 'asdf', '', {callback = function() print('jkl;') end })
     ]]
@@ -793,7 +800,7 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
                   "^\nn  asdf          <Lua function %d+>"))
   end)
 
-  it ('mapcheck() returns lua keymap correctly', function()
+  it ('mapcheck() returns lua mapping correctly', function()
     exec_lua [[
       vim.api.nvim_set_keymap ('n', 'asdf', '', {callback = function() print('jkl;') end })
     ]]
@@ -801,7 +808,7 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
                   "^<Lua function %d+>"))
   end)
 
-  it ('maparg() returns lua keymap correctly', function()
+  it ('maparg() returns lua mapping correctly', function()
     exec_lua [[
       vim.api.nvim_set_keymap ('n', 'asdf', '', {callback = function() print('jkl;') end })
     ]]
@@ -874,7 +881,28 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
     eq('\nNo mapping found', helpers.exec_capture('nmap asdf'))
   end)
 
-  it('can set descriptions on keymaps', function()
+  it('no double-free when unmapping simplifiable lua mappings', function()
+    eq(0, exec_lua [[
+      GlobalCount = 0
+      vim.api.nvim_set_keymap('n', '<C-I>', '', {callback = function() GlobalCount = GlobalCount + 1 end })
+      return GlobalCount
+    ]])
+
+    feed('<C-I>\n')
+
+    eq(1, exec_lua[[return GlobalCount]])
+
+    exec_lua [[
+      vim.api.nvim_del_keymap('n', '<C-I>')
+    ]]
+
+    feed('<C-I>\n')
+
+    eq(1, exec_lua[[return GlobalCount]])
+    eq('\nNo mapping found', helpers.exec_capture('nmap <C-I>'))
+  end)
+
+  it('can set descriptions on mappings', function()
     meths.set_keymap('n', 'lhs', 'rhs', {desc="map description"})
     eq(generate_mapargs('n', 'lhs', 'rhs', {desc="map description"}), get_mapargs('n', 'lhs'))
     eq("\nn  lhs           rhs\n                 map description",
@@ -1039,5 +1067,26 @@ describe('nvim_buf_set_keymap, nvim_buf_del_keymap', function()
 
     eq(1, exec_lua[[return GlobalCount]])
     eq('\nNo mapping found', helpers.exec_capture('nmap asdf'))
+  end)
+
+  it('no double-free when unmapping simplifiable lua mappings', function()
+    eq(0, exec_lua [[
+      GlobalCount = 0
+      vim.api.nvim_buf_set_keymap(0, 'n', '<C-I>', '', {callback = function() GlobalCount = GlobalCount + 1 end })
+      return GlobalCount
+    ]])
+
+    feed('<C-I>\n')
+
+    eq(1, exec_lua[[return GlobalCount]])
+
+    exec_lua [[
+      vim.api.nvim_buf_del_keymap(0, 'n', '<C-I>')
+    ]]
+
+    feed('<C-I>\n')
+
+    eq(1, exec_lua[[return GlobalCount]])
+    eq('\nNo mapping found', helpers.exec_capture('nmap <C-I>'))
   end)
 end)

@@ -31,6 +31,7 @@
 #include "nvim/plines.h"
 #include "nvim/popupmnu.h"
 #include "nvim/screen.h"
+#include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/window.h"
 
@@ -43,7 +44,6 @@ typedef struct {
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "move.c.generated.h"
 #endif
-
 
 /*
  * Compute wp->w_botline for the current wp->w_topline.  Can be called after
@@ -108,14 +108,15 @@ void redraw_for_cursorline(win_T *wp)
 }
 
 /// Redraw when w_virtcol changes and 'cursorcolumn' is set or 'cursorlineopt'
-/// contains "screenline".
+/// contains "screenline" or when the "CurSearch" highlight is in use.
 /// Also when concealing is on and 'concealcursor' is active.
 static void redraw_for_cursorcolumn(win_T *wp)
   FUNC_ATTR_NONNULL_ALL
 {
   if ((wp->w_valid & VALID_VIRTCOL) == 0 && !pum_visible()) {
-    if (wp->w_p_cuc) {
-      // When 'cursorcolumn' is set need to redraw with SOME_VALID.
+    if (wp->w_p_cuc || ((HL_ATTR(HLF_LC) || wp->w_hl_ids[HLF_LC]) && using_hlsearch())) {
+      // When 'cursorcolumn' is set or "CurSearch" is in use
+      // need to redraw with SOME_VALID.
       redraw_later(wp, SOME_VALID);
     } else if (wp->w_p_cul && (wp->w_p_culopt_flags & CULOPT_SCRLINE)) {
       // When 'cursorlineopt' contains "screenline" need to redraw with VALID.
@@ -799,9 +800,9 @@ void curs_columns(win_T *wp, int may_scroll)
       // When cursor wraps to first char of next line in Insert
       // mode, the 'showbreak' string isn't shown, backup to first
       // column
-      char_u *const sbr = get_showbreak_value(wp);
+      char *const sbr = (char *)get_showbreak_value(wp);
       if (*sbr && *get_cursor_pos_ptr() == NUL
-          && wp->w_wcol == vim_strsize(sbr)) {
+          && wp->w_wcol == vim_strsize((char_u *)sbr)) {
         wp->w_wcol = 0;
       }
     }
@@ -1014,7 +1015,7 @@ void textpos2screenpos(win_T *wp, pos_T *pos, int *rowp, int *scolp, int *ccolp,
     col -= wp->w_leftcol;
 
     if (col >= 0 && col < wp->w_width) {
-      coloff = col - scol + (local ? 0 : wp->w_wincol + wp->w_border_adj[3]) + 1;
+      coloff = col - scol + (local ? 0 : wp->w_wincol + wp->w_wincol_off) + 1;
     } else {
       scol = ccol = ecol = 0;
       // character is left or right of the window
@@ -1025,7 +1026,7 @@ void textpos2screenpos(win_T *wp, pos_T *pos, int *rowp, int *scolp, int *ccolp,
       }
     }
   }
-  *rowp = (local ? 0 : wp->w_winrow + wp->w_border_adj[0]) + row + rowoff;
+  *rowp = (local ? 0 : wp->w_winrow + wp->w_winrow_off) + row + rowoff;
   *scolp = scol + coloff;
   *ccolp = ccol + coloff;
   *ecolp = ecol + coloff;
@@ -1861,7 +1862,6 @@ void cursor_correct(void)
   curwin->w_viewport_invalid = true;
 }
 
-
 /*
  * move screen 'count' pages up or down and update screen
  *
@@ -2275,9 +2275,7 @@ void do_check_cursorbind(void)
         int restart_edit_save = restart_edit;
         restart_edit = true;
         check_cursor();
-        if (win_cursorline_standout(curwin) || curwin->w_p_cuc) {
-          validate_cursor();
-        }
+        validate_cursor();
         restart_edit = restart_edit_save;
       }
       // Correct cursor for multi-byte character.
@@ -2300,4 +2298,3 @@ void do_check_cursorbind(void)
   curwin = old_curwin;
   curbuf = old_curbuf;
 }
-

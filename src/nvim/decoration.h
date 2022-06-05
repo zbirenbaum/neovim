@@ -31,9 +31,7 @@ EXTERN const char *const hl_mode_str[] INIT(= { "", "replace", "combine", "blend
 typedef kvec_t(VirtTextChunk) VirtText;
 #define VIRTTEXT_EMPTY ((VirtText)KV_INITIAL_VALUE)
 
-
 typedef kvec_t(struct virt_line { VirtText line; bool left_col; }) VirtLines;
-
 
 struct Decoration {
   VirtText virt_text;
@@ -60,10 +58,11 @@ struct Decoration {
   // TODO(bfredl): in principle this should be a schar_T, but we
   // probably want some kind of glyph cache for that..
   int conceal_char;
+  bool ui_watched;  // watched for win_extmark
 };
 #define DECORATION_INIT { KV_INITIAL_VALUE, KV_INITIAL_VALUE, 0, kVTEndOfLine, \
                           kHlModeUnknown, false, false, false, false, DECOR_PRIORITY_BASE, \
-                          0, 0, NULL, 0, 0, 0, 0, 0 }
+                          0, 0, NULL, 0, 0, 0, 0, 0, false }
 
 typedef struct {
   int start_row;
@@ -74,6 +73,8 @@ typedef struct {
   int attr_id;  // cached lookup of decor.hl_id
   bool virt_text_owned;
   int win_col;
+  uint64_t ns_id;
+  uint64_t mark_id;
 } DecorRange;
 
 typedef struct {

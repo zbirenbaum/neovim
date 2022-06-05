@@ -16,8 +16,9 @@ func Test_edit_00b()
   call setline(1, ['abc '])
   inoreabbr <buffer> h here some more
   call cursor(1, 4)
-  " <c-l> expands the abbreviation and ends insertmode
-  call feedkeys(":set im\<cr> h\<c-l>:set noim\<cr>", 'tix')
+  " <esc> expands the abbreviation and ends insert mode
+  " call feedkeys(":set im\<cr> h\<c-l>:set noim\<cr>", 'tix')
+  call feedkeys("i h\<esc>", 'tix')
   call assert_equal(['abc here some more '], getline(1,'$'))
   iunabbr <buffer> h
   bw!
@@ -234,15 +235,18 @@ func Test_edit_09()
   call setline(1, ['abc', 'def', 'ghi'])
   call cursor(1, 1)
   " 1) CTRL-\ CTLR-N
-  call feedkeys(":set im\<cr>\<c-\>\<c-n>ccABC\<c-l>", 'txin')
+  " call feedkeys(":set im\<cr>\<c-\>\<c-n>ccABC\<c-l>", 'txin')
+  call feedkeys("i\<c-\>\<c-n>ccABC\<esc>", 'txin')
   call assert_equal(['ABC', 'def', 'ghi'], getline(1,'$'))
   call setline(1, ['ABC', 'def', 'ghi'])
   " 2) CTRL-\ CTLR-G
-  call feedkeys("j0\<c-\>\<c-g>ZZZ\<cr>\<c-l>", 'txin')
-  call assert_equal(['ABC', 'ZZZ', 'def', 'ghi'], getline(1,'$'))
-  call feedkeys("I\<c-\>\<c-g>YYY\<c-l>", 'txin')
-  call assert_equal(['ABC', 'ZZZ', 'YYYdef', 'ghi'], getline(1,'$'))
-  set noinsertmode
+  " CTRL-\ CTRL-G goes to Insert mode when 'insertmode' is set, but
+  " 'insertmode' is now removed so skip this test
+  " call feedkeys("j0\<c-\>\<c-g>ZZZ\<cr>\<esc>", 'txin')
+  " call assert_equal(['ABC', 'ZZZ', 'def', 'ghi'], getline(1,'$'))
+  " call feedkeys("I\<c-\>\<c-g>YYY\<c-l>", 'txin')
+  " call assert_equal(['ABC', 'ZZZ', 'YYYdef', 'ghi'], getline(1,'$'))
+  " set noinsertmode
   " 3) CTRL-\ CTRL-O
   call setline(1, ['ABC', 'ZZZ', 'def', 'ghi'])
   call cursor(1, 1)
@@ -395,15 +399,13 @@ endfunc
 
 func Test_edit_13()
   " Test smartindenting
-  if exists("+smartindent")
-    new
-    set smartindent autoindent
-    call setline(1, ["\tabc"])
-    call feedkeys("A {\<cr>more\<cr>}\<esc>", 'tnix')
-    call assert_equal(["\tabc {", "\t\tmore", "\t}"], getline(1, '$'))
-    set smartindent& autoindent&
-    bwipe!
-  endif
+  new
+  set smartindent autoindent
+  call setline(1, ["\tabc"])
+  call feedkeys("A {\<cr>more\<cr>}\<esc>", 'tnix')
+  call assert_equal(["\tabc {", "\t\tmore", "\t}"], getline(1, '$'))
+  set smartindent& autoindent&
+  bwipe!
 
   " Test autoindent removing indent of blank line.
   new
@@ -1045,7 +1047,8 @@ endfunc
 func Test_edit_F1()
   " Pressing <f1>
   new
-  call feedkeys(":set im\<cr>\<f1>\<c-l>", 'tnix')
+  " call feedkeys(":set im\<cr>\<f1>\<c-l>", 'tnix')
+  call feedkeys("i\<f1>\<esc>", 'tnix')
   set noinsertmode
   call assert_equal('help', &buftype)
   bw
@@ -1141,26 +1144,38 @@ endfunc
 
 func Test_edit_MOUSE()
   " This is a simple test, since we not really using the mouse here
-  if !has("mouse")
-    return
-  endif
+  CheckFeature mouse
   10new
   call setline(1, range(1, 100))
   call cursor(1, 1)
+  call assert_equal(1, line('w0'))
+  call assert_equal(10, line('w$'))
   set mouse=a
+  " One scroll event moves three lines.
   call feedkeys("A\<ScrollWheelDown>\<esc>", 'tnix')
-  call assert_equal([0, 4, 1, 0], getpos('.'))
-  " This should move by one pageDown, but only moves
-  " by one line when the test is run...
+  call assert_equal(4, line('w0'))
+  call assert_equal(13, line('w$'))
+  " This should move by one page down.
   call feedkeys("A\<S-ScrollWheelDown>\<esc>", 'tnix')
-  call assert_equal([0, 5, 1, 0], getpos('.'))
+  call assert_equal(14, line('w0'))
   set nostartofline
+  " Another page down.
   call feedkeys("A\<C-ScrollWheelDown>\<esc>", 'tnix')
-  call assert_equal([0, 6, 1, 0], getpos('.'))
+  call assert_equal(24, line('w0'))
+
+  call assert_equal([0, 24, 2, 0], getpos('.'))
+  " call test_setmouse(4, 3)
+  call nvim_input_mouse('left', 'press', '', 0, 3, 2) " set mouse position
+  call getchar() " discard mouse event but keep mouse position
   call feedkeys("A\<LeftMouse>\<esc>", 'tnix')
-  call assert_equal([0, 6, 1, 0], getpos('.'))
-  call feedkeys("A\<RightMouse>\<esc>", 'tnix')
-  call assert_equal([0, 6, 1, 0], getpos('.'))
+  call assert_equal([0, 27, 2, 0], getpos('.'))
+  set mousemodel=extend
+  " call test_setmouse(5, 3)
+  call nvim_input_mouse('right', 'press', '', 0, 4, 2) " set mouse position
+  call getchar() " discard mouse event but keep mouse position
+  call feedkeys("A\<RightMouse>\<esc>\<esc>", 'tnix')
+  call assert_equal([0, 28, 2, 0], getpos('.'))
+  set mousemodel&
   call cursor(1, 100)
   norm! zt
   " this should move by a screen up, but when the test
