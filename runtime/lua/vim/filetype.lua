@@ -1999,12 +1999,6 @@ local function dispatch(ft, path, bufnr, ...)
   if type(ft) == 'function' then
     ft = ft(path, bufnr, ...)
   end
-
-  if type(ft) == 'string' then
-    api.nvim_buf_set_option(bufnr, 'filetype', ft)
-    return true
-  end
-
   -- Any non-falsey value (that is, anything other than 'nil' or 'false') will
   -- end filetype matching. This is useful for e.g. the dist#ft functions that
   -- return 0, but set the buffer's filetype themselves
@@ -2041,54 +2035,55 @@ function M.match(name, bufnr)
 
   -- First check for the simple case where the full path exists as a key
   local path = vim.fn.resolve(vim.fn.fnamemodify(name, ':p'))
-  if dispatch(filename[path], path, bufnr) then
-    return
+  local fullpath = function ()
+    return dispatch(filename[path], path, bufnr)
   end
 
   -- Next check against just the file name
   local tail = vim.fn.fnamemodify(name, ':t')
-  if dispatch(filename[tail], path, bufnr) then
-    return
+  local fname = function ()
+    return dispatch(filename[tail], path, bufnr)
   end
 
   -- Next, check the file path against available patterns with non-negative priority
   local j = 1
-  for i, v in ipairs(pattern_sorted) do
-    local k = next(v)
-    local opts = v[k][2]
-    if opts.priority < 0 then
-      j = i
-      break
-    end
+  local non_negative_p = function ()
+    for i, v in ipairs(pattern_sorted) do
+      local k = next(v)
+      local opts = v[k][2]
+      if opts.priority < 0 then
+        j = i
+        break
+      end
 
-    local ft = v[k][1]
-    local matches = match_pattern(name, path, tail, k)
-    if matches then
-      if dispatch(ft, path, bufnr, matches) then
-        return
+      local ft = v[k][1]
+      local matches = match_pattern(name, path, tail, k)
+      if matches then
+        return dispatch(ft, path, bufnr, matches)
       end
     end
   end
 
   -- Next, check file extension
-  local ext = vim.fn.fnamemodify(name, ':e')
-  if dispatch(extension[ext], path, bufnr) then
-    return
+  local file_ext = function ()
+    local ext = vim.fn.fnamemodify(name, ':e')
+    return dispatch(extension[ext], path, bufnr)
   end
 
   -- Finally, check patterns with negative priority
-  for i = j, #pattern_sorted do
-    local v = pattern_sorted[i]
-    local k = next(v)
-
-    local ft = v[k][1]
-    local matches = match_pattern(name, path, tail, k)
-    if matches then
-      if dispatch(ft, path, bufnr, matches) then
-        return
+  local negative_p = function ()
+    for i = j, #pattern_sorted do
+      local v = pattern_sorted[i]
+      local k = next(v)
+      local ft = v[k][1]
+      local matches = match_pattern(name, path, tail, k)
+      if matches then
+        return dispatch(ft, path, bufnr, matches)
       end
     end
   end
+  -- return first non-nil value
+  return fullpath() or fname() or non_negative_p() or file_ext() or negative_p()
 end
 
 return M
